@@ -1,0 +1,104 @@
+import { useEffect, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+// This is a placeholder component that would use a chart library like Chart.js or Recharts
+// In a real implementation, you would need to install and import the actual chart library
+// For example: import { Line } from 'recharts';
+
+const LineChart = ({
+  title,
+  data,
+  categories = [],
+  index,
+  colors = ['#2563eb', '#16a34a', '#dc2626', '#ca8a04'],
+  valueFormatter,
+  startEndOnly = false,
+  showLegend = true,
+  showGridLines = true,
+  height = 300,
+  className,
+}) => {
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    // This is where you would initialize your chart library
+    // For example with Chart.js:
+    // if (chartRef.current) {
+    //   const chart = new Chart(chartRef.current, {
+    //     type: 'line',
+    //     data: {
+    //       labels: data.map(item => item[index]),
+    //       datasets: categories.map((category, i) => ({
+    //         label: category.name,
+    //         data: data.map(item => item[category.key]),
+    //         borderColor: colors[i % colors.length],
+    //         backgroundColor: colors[i % colors.length] + '20',
+    //         tension: 0.2,
+    //       })),
+    //     },
+    //     options: { ... }
+    //   });
+    //   return () => chart.destroy();
+    // }
+
+    // For now, we'll just log the data to show what would be rendered
+    console.log('Chart data:', { data, categories, index });
+  }, [data, categories, index, colors, startEndOnly, showGridLines]);
+
+  // Placeholder for chart rendering
+  const renderPlaceholderChart = () => {
+    if (!data || data.length === 0) {
+      return <div className="flex h-[200px] items-center justify-center">No data available</div>;
+    }
+
+    return (
+      <div className="relative h-full w-full">
+        {/* This is a placeholder visualization */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">
+            Chart visualization would appear here.
+            <br />
+            Install a chart library like Recharts or Chart.js.
+          </p>
+        </div>
+        <div className="absolute inset-0">
+          <div className="h-full w-full bg-gradient-to-r from-transparent via-primary/10 to-transparent opacity-20 rounded-md"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[100px] bg-gradient-to-t from-background to-transparent"></div>
+        </div>
+        {showLegend && (
+          <div className="absolute bottom-2 left-0 right-0 flex flex-wrap justify-center gap-4">
+            {categories.map((category, i) => (
+              <div key={category.key} className="flex items-center">
+                <div
+                  className="mr-1.5 h-3 w-3 rounded-full"
+                  style={{ backgroundColor: colors[i % colors.length] }}
+                />
+                <span className="text-xs">{category.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card className={cn('overflow-hidden', className)}>
+      {title && (
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{title}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className="p-0">
+        <div style={{ height: `${height}px` }} className="w-full">
+          {/* In a real implementation, you would render your chart library here */}
+          {/* <canvas ref={chartRef} /> */}
+          {renderPlaceholderChart()}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default LineChart;
