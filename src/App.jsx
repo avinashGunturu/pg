@@ -30,6 +30,8 @@ import PropertiesPage from '@/pages/management/PropertiesPage'
 import AddPropertyPage from '@/pages/management/AddPropertyPage'
 import PropertyDetailsPage from '@/pages/management/PropertyDetailsPage'
 import TenantsPage from '@/pages/management/TenantsPage'
+import AddTenantPage from '@/pages/management/AddTenantPage'
+import TenantDetailsPage from '@/pages/management/TenantDetailsPage'
 import EmployeesPage from '@/pages/management/EmployeesPage'
 import AddEmployeePage from '@/pages/management/AddEmployeePage'
 import EmployeeDetailsPage from '@/pages/management/EmployeeDetailsPage'
@@ -96,7 +98,9 @@ function App() {
             <Route path="properties/maintenance" element={<div className="p-4">Property Maintenance Content (To be implemented)</div>} />
             
             <Route path="tenants" element={<TenantsPage />} />
-            <Route path="tenants/add" element={<div className="p-4">Add Tenant Content (To be implemented)</div>} />
+            <Route path="tenants/add" element={<AddTenantPage />} />
+            <Route path="tenants/:id" element={<TenantDetailsPage />} />
+            <Route path="tenants/:id/edit" element={<AddTenantPage />} />
             <Route path="tenants/leases" element={<div className="p-4">Lease Agreements Content (To be implemented)</div>} />
             
             <Route path="employees" element={<EmployeesPage />} />

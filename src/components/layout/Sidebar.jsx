@@ -57,7 +57,7 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       submenu: [
         { title: 'All Employees', href: '/app/employees' },
         { title: 'Add Employee', href: '/app/employees/add' },
-        { title: 'Roles', href: '/app/employees/roles' },
+        // { title: 'Roles', href: '/app/employees/roles' },
       ],
     },
     {
