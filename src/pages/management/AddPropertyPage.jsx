@@ -108,6 +108,7 @@ const AddPropertyPage = () => {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [propertyId, setPropertyId] = useState(null);
+  const [floorPlan, setFloorPlan] = useState([]);
   const totalSteps = 7;
 
   const {
@@ -309,6 +310,7 @@ const AddPropertyPage = () => {
         kitchenAvailable: propertyData.facilities?.kitchenAvailable || false,
         commonAreaAvailable: propertyData.facilities?.commonAreaAvailable || false,
         parkingAvailable: propertyData.facilities?.parkingAvailable || false,
+        floorPlan: [], // We'll set this separately from floors field
       },
       availability: {
         availableFrom: propertyData.availability?.availableFrom ? 
@@ -391,6 +393,33 @@ const AddPropertyPage = () => {
       propertyStatus: propertyData.propertyStatus || 'ACTIVE',
     });
     
+    // Set floor plan from floors field (not from facilities.floorPlan)
+    if (propertyData.floors && propertyData.floors.length > 0) {
+      const floorsData = propertyData.floors.map(floor => ({
+        floorNumber: floor.floorNumber || 1,
+        rooms: floor.rooms && floor.rooms.length > 0 ? 
+          floor.rooms.map(room => ({
+            roomName: room.roomName || '',
+            roomNo: room.roomNo || room.roomNumber || '', // Handle both field names for compatibility
+            noOfBeds: room.noOfBeds || room.bedCount || 1, // Handle both field names for compatibility
+            noOfBedsOccupied: room.noOfBedsOccupied || room.noOfBedsOccupiedu || 0, // Handle typo in backend
+            sharingOption: room.sharingOption || room.sharingType || 'SINGLE', // Handle both field names for compatibility
+            metadata: room.metadata || {},
+          })) : [{
+            roomName: '',
+            roomNo: '',
+            noOfBeds: 1,
+            noOfBedsOccupied: 0,
+            sharingOption: 'SINGLE',
+            metadata: {}
+          }],
+      }));
+      setFloorPlan(floorsData);
+    } else if (propertyData.facilities?.floorPlan && propertyData.facilities.floorPlan.length > 0) {
+      // Fallback to old structure for backward compatibility
+      setFloorPlan(propertyData.facilities.floorPlan);
+    }
+    
     // If there are images, set them
     if (propertyData.images && propertyData.images.length > 0) {
       setUploadedImages(propertyData.images.map((img, index) => ({
@@ -415,15 +444,125 @@ const AddPropertyPage = () => {
     setUploadedImages(prev => prev.filter(img => img.id !== imageId));
   };
 
+  // Floor Plan Management Functions
+  const getSharingTypeBedCount = (sharingType) => {
+    const bedMapping = {
+      'SINGLE': 1,
+      'DOUBLE': 2,
+      'TRIPLE': 3,
+      'FOURSHARING': 4,
+      'FIVESHARING': 5,
+      'OTHER': 1 // Default to 1, user can change
+    };
+    return bedMapping[sharingType] || 1;
+  };
+
+  const generateFloorPlan = (numberOfFloors) => {
+    const floors = [];
+    for (let i = 1; i <= numberOfFloors; i++) {
+      floors.push({
+        floorNumber: i,
+        rooms: [{
+          roomName: '',
+          roomNo: '', // Changed from roomNumber to roomNo
+          noOfBeds: 1, // Changed from bedCount to noOfBeds
+          noOfBedsOccupied: 0, // Fixed typo from noOfBedsOccupiedu
+          sharingOption: 'SINGLE', // Changed from sharingType to sharingOption
+          metadata: {}
+        }]
+      });
+    }
+    setFloorPlan(floors);
+    // No longer setting facilities.floorPlan since floors is separate
+  };
+
+  const addRoomToFloor = (floorIndex) => {
+    const updatedFloorPlan = [...floorPlan];
+    updatedFloorPlan[floorIndex].rooms.push({
+      roomName: '',
+      roomNo: '', // Changed from roomNumber to roomNo
+      noOfBeds: 1, // Changed from bedCount to noOfBeds
+      noOfBedsOccupied: 0, // Fixed typo from noOfBedsOccupiedu
+      sharingOption: 'SINGLE', // Changed from sharingType to sharingOption
+      metadata: {}
+    });
+    setFloorPlan(updatedFloorPlan);
+    // No longer setting facilities.floorPlan since floors is separate
+  };
+
+  const removeRoomFromFloor = (floorIndex, roomIndex) => {
+    const updatedFloorPlan = [...floorPlan];
+    if (updatedFloorPlan[floorIndex].rooms.length > 1) {
+      updatedFloorPlan[floorIndex].rooms.splice(roomIndex, 1);
+      setFloorPlan(updatedFloorPlan);
+      // No longer setting facilities.floorPlan since floors is separate
+    }
+  };
+
+  const updateRoom = (floorIndex, roomIndex, field, value) => {
+    const updatedFloorPlan = [...floorPlan];
+    updatedFloorPlan[floorIndex].rooms[roomIndex][field] = value;
+    
+    // Auto-fill bed count based on sharing type (except for OTHER)
+    if (field === 'sharingOption' && value !== 'OTHER') {
+      const bedCount = getSharingTypeBedCount(value);
+      updatedFloorPlan[floorIndex].rooms[roomIndex]['noOfBeds'] = bedCount;
+    }
+    
+    setFloorPlan(updatedFloorPlan);
+    // No longer setting facilities.floorPlan since floors is separate
+    
+    // Auto-calculate total bed capacity when bed counts change
+    if (field === 'noOfBeds' || (field === 'sharingOption' && value !== 'OTHER')) {
+      calculateTotalBedCapacity(updatedFloorPlan);
+    }
+  };
+
+  const calculateTotalBedCapacity = (floors) => {
+    const totalBeds = floors.reduce((total, floor) => {
+      return total + floor.rooms.reduce((floorTotal, room) => {
+        return floorTotal + (parseInt(room.noOfBeds) || 0); // Changed from bedCount to noOfBeds
+      }, 0);
+    }, 0);
+    setValue('facilities.totalBedCapacity', totalBeds);
+  };
+
+  const calculateTotalRooms = (floors) => {
+    const totalRooms = floors.reduce((total, floor) => {
+      return total + floor.rooms.length;
+    }, 0);
+    setValue('facilities.totalRooms', totalRooms);
+  };
+
+  // Watch for changes in total floors to regenerate floor plan
+  const watchedTotalFloors = watch('facilities.totalFloors');
+  useEffect(() => {
+    if (watchedTotalFloors && watchedTotalFloors !== floorPlan.length) {
+      if (watchedTotalFloors > 0) {
+        generateFloorPlan(watchedTotalFloors);
+      }
+    }
+  }, [watchedTotalFloors]);
+
+  // Auto-calculate total rooms when floor plan changes
+  useEffect(() => {
+    if (floorPlan.length > 0) {
+      calculateTotalRooms(floorPlan);
+      calculateTotalBedCapacity(floorPlan);
+    }
+  }, [floorPlan]);
+
   const onSubmit = async (data) => {
     console.log('🚀 onSubmit function called - this should only happen on button click!');
     console.log('Current step:', currentStep);
     console.log('Total steps:', totalSteps);
     console.log('Is edit mode:', isEditMode);
     
-    // Double-check that we're on the final step
+    // STRICT CHECK: Only allow submission on the final step (step 7)
     if (currentStep !== totalSteps) {
-      console.log('❌ Form submission blocked - not on final step');
+      console.log('❌ Form submission blocked - not on final step. Current:', currentStep, 'Required:', totalSteps);
+      setErrorMessage(`Please complete all steps. You are currently on step ${currentStep} of ${totalSteps}.`);
+      setShowErrorModal(true);
       return;
     }
     
@@ -432,10 +571,18 @@ const AddPropertyPage = () => {
       
       // Prepare the data according to the API structure
       const propertyData = {
-
         ...data,
         ownerId: ownerId,
         images: uploadedImages?.map(img => img.preview), // In real app, upload to server first
+        facilities: {
+          totalRooms: data.facilities.totalRooms,
+          totalFloors: data.facilities.totalFloors,
+          totalBedCapacity: data.facilities.totalBedCapacity,
+          kitchenAvailable: data.facilities.kitchenAvailable,
+          commonAreaAvailable: data.facilities.commonAreaAvailable,
+          parkingAvailable: data.facilities.parkingAvailable
+        },
+        floors: floorPlan.length > 0 ? floorPlan : undefined // Send floors as separate field
       };
 
       console.log('Submitting property data:', propertyData);
@@ -524,7 +671,7 @@ const AddPropertyPage = () => {
           isValid = false;
         }
       } else if (currentStep === 3) {
-        // Validate facilities
+        // Validate facilities and floor plan
         const facilities = watch(['facilities.totalRooms', 'facilities.totalFloors', 'facilities.totalBedCapacity', 'availability.availableFrom']);
         
         if (!facilities[0] || facilities[0] < 1) {
@@ -543,6 +690,40 @@ const AddPropertyPage = () => {
           setErrorMessage('Available from date is required');
           setShowErrorModal(true);
           isValid = false;
+        } else if (floorPlan.length > 0) {
+          // Validate floor plan if it exists
+          for (let floorIndex = 0; floorIndex < floorPlan.length; floorIndex++) {
+            const floor = floorPlan[floorIndex];
+            if (!floor.rooms || floor.rooms.length === 0) {
+              setErrorMessage(`Floor ${floor.floorNumber} must have at least one room`);
+              setShowErrorModal(true);
+              isValid = false;
+              break;
+            }
+            
+            for (let roomIndex = 0; roomIndex < floor.rooms.length; roomIndex++) {
+              const room = floor.rooms[roomIndex];
+              if (!room.roomName || room.roomName.trim() === '') {
+                setErrorMessage(`Floor ${floor.floorNumber}, Room ${roomIndex + 1}: Room name is required`);
+                setShowErrorModal(true);
+                isValid = false;
+                break;
+              }
+              if (!room.roomNo || room.roomNo.trim() === '') { // Changed from roomNumber to roomNo
+                setErrorMessage(`Floor ${floor.floorNumber}, Room ${roomIndex + 1}: Room number is required`);
+                setShowErrorModal(true);
+                isValid = false;
+                break;
+              }
+              if (!room.noOfBeds || room.noOfBeds < 1) { // Changed from bedCount to noOfBeds
+                setErrorMessage(`Floor ${floor.floorNumber}, Room ${roomIndex + 1}: Number of beds must be at least 1`);
+                setShowErrorModal(true);
+                isValid = false;
+                break;
+              }
+            }
+            if (!isValid) break;
+          }
         }
       } else if (currentStep === 4) {
         // Validate sharing options
@@ -691,7 +872,7 @@ const AddPropertyPage = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" >
+      <form className="space-y-6">
         {/* Step 1: Basic Information */}
         {currentStep === 1 && (
           <Card>
@@ -718,17 +899,24 @@ const AddPropertyPage = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="propertyType">Property Type *</Label>
-                  <select
-                    id="propertyType"
-                    {...register('propertyType')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {propertyTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      id="propertyType"
+                      {...register('propertyType')}
+                      className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
+                    >
+                      {propertyTypes.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                      </svg>
+                    </div>
+                  </div>
                   {errors.propertyType && (
                     <p className="text-red-500 text-xs">{errors.propertyType.message}</p>
                   )}
@@ -751,16 +939,23 @@ const AddPropertyPage = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="propertyStatus">Property Status *</Label>
-                <select
-                  id="propertyStatus"
-                  {...register('propertyStatus')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="UNDER REVIEW">Under Review</option>
-                </select>
+                <div className="relative">
+                  <select
+                    id="propertyStatus"
+                    {...register('propertyStatus')}
+                    className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="UNDER REVIEW">Under Review</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
+                  </div>
+                </div>
                 {errors.propertyStatus && (
                   <p className="text-red-500 text-xs">{errors.propertyStatus.message}</p>
                 )}
@@ -947,12 +1142,14 @@ const AddPropertyPage = () => {
                     id="totalRooms"
                     type="number"
                     {...register('facilities.totalRooms', { valueAsNumber: true })}
-                    placeholder="Number of rooms"
-                    className={errors.facilities?.totalRooms ? 'border-red-500' : ''}
+                    placeholder="Auto-calculated from floor plan"
+                    className={`${errors.facilities?.totalRooms ? 'border-red-500' : ''} bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                    readOnly
                   />
                   {errors.facilities?.totalRooms && (
                     <p className="text-red-500 text-xs">{errors.facilities.totalRooms.message}</p>
                   )}
+                  <p className="text-xs text-gray-500">This will be calculated automatically from your floor plan</p>
                 </div>
 
                 <div className="space-y-2">
@@ -960,13 +1157,16 @@ const AddPropertyPage = () => {
                   <Input
                     id="totalFloors"
                     type="number"
+                    min="1"
+                    max="20"
                     {...register('facilities.totalFloors', { valueAsNumber: true })}
                     placeholder="Number of floors"
-                    className={errors.facilities?.totalFloors ? 'border-red-500' : ''}
+                    className={`${errors.facilities?.totalFloors ? 'border-red-500' : ''} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
                   {errors.facilities?.totalFloors && (
                     <p className="text-red-500 text-xs">{errors.facilities.totalFloors.message}</p>
                   )}
+                  <p className="text-xs text-gray-500">This will generate your floor plan below</p>
                 </div>
 
                 <div className="space-y-2">
@@ -975,14 +1175,174 @@ const AddPropertyPage = () => {
                     id="totalBedCapacity"
                     type="number"
                     {...register('facilities.totalBedCapacity', { valueAsNumber: true })}
-                    placeholder="Total beds available"
-                    className={errors.facilities?.totalBedCapacity ? 'border-red-500' : ''}
+                    placeholder="Auto-calculated from rooms"
+                    className={`${errors.facilities?.totalBedCapacity ? 'border-red-500' : ''} bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                    readOnly
                   />
                   {errors.facilities?.totalBedCapacity && (
                     <p className="text-red-500 text-xs">{errors.facilities.totalBedCapacity.message}</p>
                   )}
+                  <p className="text-xs text-gray-500">This will be calculated automatically from your room configurations</p>
                 </div>
               </div>
+
+              {/* Interactive Floor Plan Section */}
+              {watchedTotalFloors > 0 && (
+                <div className="space-y-6">
+                  <div className="border-t pt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-gray-900">Floor Plan Management</h3>
+                      <div className="text-sm text-gray-500">
+                        {floorPlan.reduce((total, floor) => total + floor.rooms.length, 0)} rooms across {watchedTotalFloors} floor{watchedTotalFloors > 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {floorPlan.map((floor, floorIndex) => (
+                        <div key={floor.floorNumber} className="border rounded-lg p-4 bg-gray-50">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                              <Building2 className="h-4 w-4" />
+                              Floor {floor.floorNumber}
+                            </h4>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addRoomToFloor(floorIndex)}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Room
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            {floor.rooms.map((room, roomIndex) => (
+                              <div key={roomIndex} className="bg-white border rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h5 className="font-medium text-sm text-gray-700">Room {roomIndex + 1}</h5>
+                                  {floor.rooms.length > 1 && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => removeRoomFromFloor(floorIndex, roomIndex)}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Room Name *</Label>
+                                    <Input
+                                      placeholder="e.g., Master Bedroom"
+                                      value={room.roomName}
+                                      onChange={(e) => updateRoom(floorIndex, roomIndex, 'roomName', e.target.value)}
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Room Number *</Label>
+                                    <Input
+                                      placeholder="e.g., 101, A1"
+                                      value={room.roomNo}
+                                      onChange={(e) => updateRoom(floorIndex, roomIndex, 'roomNo', e.target.value)}
+                                      className="text-sm"
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Sharing Type *</Label>
+                                    <div className="relative">
+                                      <select
+                                        value={room.sharingOption}
+                                        onChange={(e) => updateRoom(floorIndex, roomIndex, 'sharingOption', e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
+                                      >
+                                        {sharingTypes.map((type) => (
+                                          <option key={type.value} value={type.value}>
+                                            {type.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Number of Beds *</Label>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      max="10"
+                                      placeholder="1"
+                                      value={room.noOfBeds}
+                                      onChange={(e) => updateRoom(floorIndex, roomIndex, 'noOfBeds', parseInt(e.target.value) || 1)}
+                                      className={`text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${room.sharingOption === 'OTHER' ? '' : 'bg-gray-100'}`}
+                                      readOnly={room.sharingOption !== 'OTHER'}
+                                      title={room.sharingOption === 'OTHER' ? 'Enter custom bed count' : `Auto-filled based on ${room.sharingOption} sharing`}
+                                    />
+                                    {room.sharingOption !== 'OTHER' && (
+                                      <p className="text-xs text-gray-500">Auto-filled for {room.sharingOption} sharing</p>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Room Preview */}
+                                <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                                  <span className="font-medium">Preview:</span> {room.roomName || 'Unnamed Room'} (#{room.roomNo || 'No Number'}) - {room.noOfBeds || 0} bed{room.noOfBeds !== 1 ? 's' : ''} ({room.sharingOption} sharing)
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Floor Plan Summary */}
+                    <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">Floor Plan Summary</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="text-center">
+                          <div className="font-medium text-lg text-blue-800">{floorPlan.length}</div>
+                          <div className="text-blue-600">Total Floors</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-lg text-blue-800">
+                            {floorPlan.reduce((total, floor) => total + floor.rooms.length, 0)}
+                          </div>
+                          <div className="text-blue-600">Total Rooms</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-lg text-blue-800">
+                            {floorPlan.reduce((total, floor) => 
+                              total + floor.rooms.reduce((roomTotal, room) => roomTotal + (room.noOfBeds || 0), 0), 0
+                            )}
+                          </div>
+                          <div className="text-blue-600">Total Beds</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-medium text-lg text-blue-800">
+                            {floorPlan.reduce((total, floor) => 
+                              total + floor.rooms.filter(room => room.roomName && room.roomNo).length, 0
+                            )}
+                          </div>
+                          <div className="text-blue-600">Completed Rooms</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <Label>Available Facilities</Label>
@@ -1029,16 +1389,25 @@ const AddPropertyPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="availableFrom">Available From *</Label>
-                <Input
-                  id="availableFrom"
-                  type="date"
-                  {...register('availability.availableFrom')}
-                  className={errors.availability?.availableFrom ? 'border-red-500' : ''}
-                />
+                <Label htmlFor="availableFrom" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  Available From *
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="availableFrom"
+                    type="date"
+                    {...register('availability.availableFrom')}
+                    className={`pl-10 pr-3 py-2 border rounded-md transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${errors.availability?.availableFrom ? 'border-red-500' : 'border-gray-300 hover:border-gray-400'}`}
+                  />
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
                 {errors.availability?.availableFrom && (
                   <p className="text-red-500 text-xs">{errors.availability.availableFrom.message}</p>
                 )}
+                <p className="text-xs text-gray-500">Select when this property will be available for tenants</p>
               </div>
             </CardContent>
           </Card>
@@ -1075,16 +1444,23 @@ const AddPropertyPage = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Sharing Type *</Label>
-                      <select
-                        {...register(`sharingOptions.${index}.sharingType`)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {sharingTypes.map((type) => (
-                          <option key={type.value} value={type.value}>
-                            {type.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <select
+                          {...register(`sharingOptions.${index}.sharingType`)}
+                          className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
+                        >
+                          {sharingTypes.map((type) => (
+                            <option key={type.value} value={type.value}>
+                              {type.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -1093,6 +1469,7 @@ const AddPropertyPage = () => {
                         type="number"
                         {...register(`sharingOptions.${index}.monthlyRent`, { valueAsNumber: true })}
                         placeholder="Monthly rent amount"
+                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
 
@@ -1102,6 +1479,7 @@ const AddPropertyPage = () => {
                         type="number"
                         {...register(`sharingOptions.${index}.deposit`, { valueAsNumber: true })}
                         placeholder="Deposit amount"
+                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                   </div>
@@ -1123,6 +1501,7 @@ const AddPropertyPage = () => {
                         type="number"
                         {...register(`sharingOptions.${index}.depositBreakdown.damages`, { valueAsNumber: true })}
                         placeholder="Damages amount"
+                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1131,6 +1510,7 @@ const AddPropertyPage = () => {
                         type="number"
                         {...register(`sharingOptions.${index}.depositBreakdown.cleaning`, { valueAsNumber: true })}
                         placeholder="Cleaning amount"
+                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1139,31 +1519,34 @@ const AddPropertyPage = () => {
                         type="number"
                         {...register(`sharingOptions.${index}.depositBreakdown.other`, { valueAsNumber: true })}
                         placeholder="Other amount"
+                        className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                   </div>
                 </div>
               ))}
 
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => appendSharingOption({
-                  sharingType: 'SINGLE',
-                  monthlyRent: 0,
-                  deposit: 0,
-                  description: '',
-                  depositBreakdown: {
-                    damages: 0,
-                    cleaning: 0,
-                    other: 0,
-                  },
-                })}
-                className="w-full"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Another Sharing Option
-              </Button>
+              <div className="flex justify-center pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => appendSharingOption({
+                    sharingType: 'SINGLE',
+                    monthlyRent: 0,
+                    deposit: 0,
+                    description: '',
+                    depositBreakdown: {
+                      damages: 0,
+                      cleaning: 0,
+                      other: 0,
+                    },
+                  })}
+                  className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 text-blue-700 font-medium px-6 py-3 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add Another Sharing Option
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1207,16 +1590,18 @@ const AddPropertyPage = () => {
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendHighlightedAmenity({ name: '', description: '' })}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Highlighted Amenity
-                  </Button>
+                  <div className="flex justify-center pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendHighlightedAmenity({ name: '', description: '' })}
+                      className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 hover:from-green-100 hover:to-emerald-100 hover:border-green-300 text-green-700 font-medium px-4 py-2 rounded-md transition-all duration-200 shadow-sm hover:shadow transform hover:scale-105"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Highlighted Amenity
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1249,16 +1634,18 @@ const AddPropertyPage = () => {
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendAmenity({ name: '', description: '' })}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add General Amenity
-                  </Button>
+                  <div className="flex justify-center pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendAmenity({ name: '', description: '' })}
+                      className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 hover:from-purple-100 hover:to-pink-100 hover:border-purple-300 text-purple-700 font-medium px-6 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add General Amenity
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1285,16 +1672,18 @@ const AddPropertyPage = () => {
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendRule('')}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Rule
-                  </Button>
+                  <div className="flex justify-center pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendRule('')}
+                      className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 text-amber-700 font-medium px-6 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Rule
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1320,6 +1709,7 @@ const AddPropertyPage = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => appendNearbyLocation({ name: '', distance: '', type: 'OTHER' })}
+                    className="bg-gradient-to-r from-cyan-50 to-blue-50 border-2 border-cyan-200 hover:from-cyan-100 hover:to-blue-100 hover:border-cyan-300 text-cyan-700 font-medium px-4 py-2 rounded-md transition-all duration-200 shadow-sm hover:shadow transform hover:scale-105"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Location
@@ -1338,7 +1728,7 @@ const AddPropertyPage = () => {
                     />
                     <select
                       {...register(`nearbyLocations.${index}.type`)}
-                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
                     >
                       {locationTypes.map((type) => (
                         <option key={type.value} value={type.value}>
@@ -1373,6 +1763,7 @@ const AddPropertyPage = () => {
                       description: '',
                       weeklyMenu: days.map(day => ({ day: day.value, menu: [''] }))
                     })}
+                    className="bg-gradient-to-r from-rose-50 to-pink-50 border-2 border-rose-200 hover:from-rose-100 hover:to-pink-100 hover:border-rose-300 text-rose-700 font-medium px-4 py-2 rounded-md transition-all duration-200 shadow-sm hover:shadow transform hover:scale-105"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Meal
@@ -1399,7 +1790,7 @@ const AddPropertyPage = () => {
                         <Label>Meal Type</Label>
                         <select
                           {...register(`foodDetails.${index}.mealType`)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
                         >
                           {mealTypes.map((type) => (
                             <option key={type.value} value={type.value}>
@@ -1562,6 +1953,27 @@ const AddPropertyPage = () => {
                     <div className="text-gray-600">Total Beds</div>
                   </div>
                 </div>
+                
+                {/* Floor Plan Review */}
+                {floorPlan.length > 0 && (
+                  <div className="mt-4">
+                    <h5 className="text-sm font-medium text-gray-700 mb-2">Floor Plan Summary</h5>
+                    <div className="space-y-2">
+                      {floorPlan.map((floor, floorIndex) => (
+                        <div key={floor.floorNumber} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="font-medium text-sm mb-1">Floor {floor.floorNumber} ({floor.rooms.length} room{floor.rooms.length !== 1 ? 's' : ''})</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+                            {floor.rooms.map((room, roomIndex) => (
+                              <div key={roomIndex}>
+                                • {room.roomName || `Room ${roomIndex + 1}`} (#{room.roomNo || 'No Number'}) - {room.noOfBeds || 0} bed{room.noOfBeds !== 1 ? 's' : ''}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4">
@@ -1705,7 +2117,8 @@ const AddPropertyPage = () => {
             </Button>
           ) : (
             <Button
-              type="submit"
+              type="button"
+              onClick={handleSubmit(onSubmit)} // Explicitly call handleSubmit only on button click
               disabled={isLoading} 
               className="bg-green-600 hover:bg-green-700"
             >
@@ -1741,13 +2154,11 @@ const AddPropertyPage = () => {
             <Button
               onClick={() => {
                 setShowSuccessModal(false);
-                if (isEditMode) {
-                  navigate('/app/properties');
-                }
+                navigate('/app/properties'); // Navigate to properties page for both create and update
               }}
               className="w-full"
             >
-              {isEditMode ? 'Back to Properties' : 'Continue'}
+              {isEditMode ? 'Back to Properties' : 'View Properties'}
             </Button>
           </div>
         </div>
