@@ -31,6 +31,8 @@ import AddPropertyPage from '@/pages/management/AddPropertyPage'
 import PropertyDetailsPage from '@/pages/management/PropertyDetailsPage'
 import TenantsPage from '@/pages/management/TenantsPage'
 import EmployeesPage from '@/pages/management/EmployeesPage'
+import AddEmployeePage from '@/pages/management/AddEmployeePage'
+import EmployeeDetailsPage from '@/pages/management/EmployeeDetailsPage'
 import InventoryPage from '@/pages/management/InventoryPage'
 import FinancialPage from '@/pages/management/FinancialPage'
 
@@ -98,7 +100,9 @@ function App() {
             <Route path="tenants/leases" element={<div className="p-4">Lease Agreements Content (To be implemented)</div>} />
             
             <Route path="employees" element={<EmployeesPage />} />
-            <Route path="employees/add" element={<div className="p-4">Add Employee Content (To be implemented)</div>} />
+            <Route path="employees/add" element={<AddEmployeePage />} />
+            <Route path="employees/:id" element={<EmployeeDetailsPage />} />
+            <Route path="employees/:id/edit" element={<AddEmployeePage />} />
             <Route path="employees/roles" element={<div className="p-4">Employee Roles Content (To be implemented)</div>} />
             
             <Route path="inventory" element={<InventoryPage />} />
