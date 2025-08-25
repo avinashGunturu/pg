@@ -114,7 +114,9 @@ const AddTenantPage = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState([]);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [profilePicture, setProfilePicture] = useState(null);
 
@@ -763,8 +765,210 @@ useEffect(() => {
     ));
   };
 
-  // Navigation handlers
-  const nextStep = () => {
+  // Validate current step before moving to next
+  const validateCurrentStep = async () => {
+    const errors = [];
+    
+    switch (currentStep) {
+      case 1: // Personal Information
+        if (!watch('personalInfo.firstName')?.trim()) {
+          errors.push('First name is required');
+        }
+        if (!watch('personalInfo.lastName')?.trim()) {
+          errors.push('Last name is required');
+        }
+        if (!watch('personalInfo.dob')) {
+          errors.push('Date of birth is required');
+        }
+        if (!watch('personalInfo.gender')) {
+          errors.push('Gender is required');
+        }
+        const age = watch('personalInfo.age');
+        if (!age || age < 18) {
+          errors.push('Age must be at least 18 years');
+        }
+        break;
+        
+      case 2: // Contact Information
+        if (!watch('contactInfo.mobileNumber')?.trim()) {
+          errors.push('Mobile number is required');
+        } else {
+          const mobileNumber = watch('contactInfo.mobileNumber').trim();
+          if (mobileNumber.length < 10) {
+            errors.push('Mobile number must be at least 10 digits');
+          }
+          if (!/^[0-9+\-\s()]+$/.test(mobileNumber)) {
+            errors.push('Mobile number contains invalid characters');
+          }
+        }
+        
+        if (!watch('contactInfo.email')?.trim()) {
+          errors.push('Email address is required');
+        } else {
+          const email = watch('contactInfo.email').trim();
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            errors.push('Please enter a valid email address');
+          }
+        }
+        
+        if (!watch('contactInfo.address.addressLine1')?.trim()) {
+          errors.push('Address line 1 is required');
+        }
+        if (!watch('contactInfo.address.city')?.trim()) {
+          errors.push('City is required');
+        }
+        if (!watch('contactInfo.address.state')?.trim()) {
+          errors.push('State is required');
+        }
+        
+        if (!watch('contactInfo.address.pincode')?.trim()) {
+          errors.push('Pincode is required');
+        } else {
+          const pincode = watch('contactInfo.address.pincode').trim();
+          if (pincode.length !== 6 || !/^[0-9]+$/.test(pincode)) {
+            errors.push('Pincode must be exactly 6 digits');
+          }
+        }
+        break;
+        
+      case 3: // Education & Employment
+        // Optional fields - no mandatory validation
+        break;
+        
+        case 4: // Property & Room
+        if (!watch('propertyId')?.trim()) {
+          errors.push('Property selection is required');
+        }
+        
+        const floor = watch('roomDetails.floor');
+        if (floor === undefined || floor === null || floor === '') {
+          errors.push('Floor selection is required');
+        }
+        
+        if (!watch('roomDetails.roomNumber')?.trim()) {
+          errors.push('Room selection is required');
+        }
+        
+        if (!watch('roomDetails.roomType')?.trim()) {
+          errors.push('Room type is required');
+        }
+        
+        // Validate room availability if property is selected
+        const selectedPropertyId = watch('propertyId');
+        const selectedFloor = watch('roomDetails.floor');
+        const selectedRoomNumber = watch('roomDetails.roomNumber');
+        
+        if (selectedPropertyId && selectedFloor !== undefined && selectedRoomNumber && propertyRooms[selectedPropertyId]) {
+          const floorRooms = propertyRooms[selectedPropertyId][selectedFloor.toString()];
+          if (floorRooms) {
+            const selectedRoom = floorRooms.find(room => 
+              String(room.roomNo) === String(selectedRoomNumber) ||
+              String(room.roomName) === String(selectedRoomNumber)
+            );
+            
+            if (selectedRoom && selectedRoom.occupied && !isEditMode) {
+              errors.push('Selected room is already occupied. Please choose another room.');
+            }
+          }
+        }
+        break;
+        
+      case 5: // Financial Details
+        const monthlyRent = watch('financials.payPerMonth');
+        if (!monthlyRent || monthlyRent <= 0) {
+          errors.push('Monthly rent must be greater than 0');
+        }
+        
+        const deposit = watch('financials.deposit');
+        if (deposit === undefined || deposit < 0) {
+          errors.push('Security deposit must be 0 or greater');
+        }
+        
+        if (!watch('financials.rentDueDate')) {
+          errors.push('Rent due date is required');
+        }
+        
+        const leaseStartDate = watch('leaseDetails.leaseStartDate');
+        const leaseEndDate = watch('leaseDetails.leaseEndDate');
+        
+        if (!leaseStartDate) {
+          errors.push('Lease start date is required');
+        }
+        if (!leaseEndDate) {
+          errors.push('Lease end date is required');
+        }
+        
+        // Validate lease dates logic
+        if (leaseStartDate && leaseEndDate) {
+          const startDate = new Date(leaseStartDate);
+          const endDate = new Date(leaseEndDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (startDate >= endDate) {
+            errors.push('Lease end date must be after start date');
+          }
+          
+          if (startDate < today) {
+            errors.push('Lease start date cannot be in the past');
+          }
+        }
+        break;
+        
+      case 6: // Emergency Contacts
+        const emergencyContacts = watch('emergencyContacts') || [];
+        if (emergencyContacts.length === 0) {
+          errors.push('At least one emergency contact is required');
+        } else {
+          emergencyContacts.forEach((contact, index) => {
+            if (!contact.name?.trim()) {
+              errors.push(`Emergency contact ${index + 1}: Name is required`);
+            }
+            if (!contact.relation?.trim()) {
+              errors.push(`Emergency contact ${index + 1}: Relationship is required`);
+            }
+            if (!contact.contactNumber?.trim()) {
+              errors.push(`Emergency contact ${index + 1}: Contact number is required`);
+            } else if (contact.contactNumber.length < 10) {
+              errors.push(`Emergency contact ${index + 1}: Contact number must be at least 10 digits`);
+            }
+          });
+        }
+        break;
+        
+      case 7: // Documents & Review
+        if (!watch('declaration')) {
+          errors.push('Declaration must be accepted to proceed');
+        }
+        break;
+    }
+    
+    return errors;
+  };
+
+  // Validate current step manually (without navigation)
+  const validateCurrentStepManually = async () => {
+    const validationErrors = await validateCurrentStep();
+    
+    if (validationErrors.length > 0) {
+      setValidationErrors(validationErrors);
+      setShowValidationModal(true);
+    } else {
+      // Show success message for valid step
+      setErrorMessage('✅ All fields in this step are valid!');
+      setShowErrorModal(true);
+    }
+  };
+  const nextStep = async () => {
+    const validationErrors = await validateCurrentStep();
+    
+    if (validationErrors.length > 0) {
+      setValidationErrors(validationErrors);
+      setShowValidationModal(true);
+      return;
+    }
+    
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
@@ -788,12 +992,35 @@ useEffect(() => {
       return;
     }
 
+    // Perform comprehensive validation before submission
+    const allValidationErrors = [];
+    for (let step = 1; step <= totalSteps; step++) {
+      const stepCurrentStep = currentStep;
+      setCurrentStep(step); // Temporarily set step for validation
+      const stepErrors = await validateCurrentStep();
+      if (stepErrors.length > 0) {
+        allValidationErrors.push(...stepErrors.map(err => `Step ${step}: ${err}`));
+      }
+      setCurrentStep(stepCurrentStep); // Restore current step
+    }
+    
     // Check for form validation errors
-    const hasErrors = Object.keys(errors).length > 0;
-    if (hasErrors) {
-      console.log('Form has validation errors:', errors);
-      setErrorMessage('Please fix all validation errors before submitting.');
-      setShowErrorModal(true);
+    const hasZodErrors = Object.keys(errors).length > 0;
+    if (hasZodErrors) {
+      console.log('Form has Zod validation errors:', errors);
+      // Convert Zod errors to readable format
+      const zodErrorMessages = [];
+      Object.entries(errors).forEach(([field, error]) => {
+        if (error?.message) {
+          zodErrorMessages.push(error.message);
+        }
+      });
+      allValidationErrors.push(...zodErrorMessages);
+    }
+    
+    if (allValidationErrors.length > 0) {
+      setValidationErrors(allValidationErrors);
+      setShowValidationModal(true);
       return;
     }
 
@@ -1190,26 +1417,40 @@ useEffect(() => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name *</Label>
+                  <Label htmlFor="firstName" className="flex items-center gap-1">
+                    First Name 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
                   <Input
                     id="firstName"
                     {...register('personalInfo.firstName')}
                     placeholder="Enter first name"
+                    className={errors.personalInfo?.firstName ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
                   />
                   {errors.personalInfo?.firstName && (
-                    <p className="text-red-500 text-xs">{errors.personalInfo.firstName.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.personalInfo.firstName.message}
+                    </p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Label htmlFor="lastName" className="flex items-center gap-1">
+                    Last Name 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
                   <Input
                     id="lastName"
                     {...register('personalInfo.lastName')}
                     placeholder="Enter last name"
+                    className={errors.personalInfo?.lastName ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
                   />
                   {errors.personalInfo?.lastName && (
-                    <p className="text-red-500 text-xs">{errors.personalInfo.lastName.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.personalInfo.lastName.message}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1236,12 +1477,17 @@ useEffect(() => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="gender">Gender *</Label>
+                  <Label htmlFor="gender" className="flex items-center gap-1">
+                    Gender 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
                   <div className="relative">
                     <select
                       id="gender"
                       {...register('personalInfo.gender')}
-                      className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400"
+                      className={`w-full px-3 py-2 text-gray-900 bg-white border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer transition-all duration-200 hover:border-gray-400 ${
+                        errors.personalInfo?.gender ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+                      }`}
                     >
                       {genderOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -1251,7 +1497,10 @@ useEffect(() => {
                     </select>
                   </div>
                   {errors.personalInfo?.gender && (
-                    <p className="text-red-500 text-xs">{errors.personalInfo.gender.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.personalInfo.gender.message}
+                    </p>
                   )}
                 </div>
 
@@ -1275,14 +1524,21 @@ useEffect(() => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="dob">Date of Birth *</Label>
+                  <Label htmlFor="dob" className="flex items-center gap-1">
+                    Date of Birth 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
                   <Input
                     id="dob"
                     type="date"
                     {...register('personalInfo.dob')}
+                    className={errors.personalInfo?.dob ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
                   />
                   {errors.personalInfo?.dob && (
-                    <p className="text-red-500 text-xs">{errors.personalInfo.dob.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.personalInfo.dob.message}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1319,32 +1575,70 @@ useEffect(() => {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="mobileNumber">Mobile Number *</Label>
-                  <Input id="mobileNumber" {...register('contactInfo.mobileNumber')} placeholder="Enter mobile number" />
+                  <Label htmlFor="mobileNumber" className="flex items-center gap-1">
+                    Mobile Number 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="mobileNumber" 
+                    {...register('contactInfo.mobileNumber')} 
+                    placeholder="Enter mobile number"
+                    className={errors.contactInfo?.mobileNumber ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.contactInfo?.mobileNumber && (
-                    <p className="text-red-500 text-xs">{errors.contactInfo.mobileNumber.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.contactInfo.mobileNumber.message}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="alternativeNumber">Alternative Number</Label>
-                  <Input id="alternativeNumber" {...register('contactInfo.alternativeNumber')} placeholder="Enter alternative number" />
+                  <Input 
+                    id="alternativeNumber" 
+                    {...register('contactInfo.alternativeNumber')} 
+                    placeholder="Enter alternative number" 
+                  />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input id="email" type="email" {...register('contactInfo.email')} placeholder="Enter email address" />
+                <Label htmlFor="email" className="flex items-center gap-1">
+                  Email Address 
+                  <span className="text-red-500 text-sm">*</span>
+                </Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  {...register('contactInfo.email')} 
+                  placeholder="Enter email address"
+                  className={errors.contactInfo?.email ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                />
                 {errors.contactInfo?.email && (
-                  <p className="text-red-500 text-xs">{errors.contactInfo.email.message}</p>
+                  <p className="text-red-500 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {errors.contactInfo.email.message}
+                  </p>
                 )}
               </div>
               <div className="space-y-4">
                 <h4 className="font-medium text-lg">Permanent Address</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="addressLine1">Address Line 1 *</Label>
-                    <Input id="addressLine1" {...register('contactInfo.address.addressLine1')} placeholder="Enter address line 1" />
+                    <Label htmlFor="addressLine1" className="flex items-center gap-1">
+                      Address Line 1 
+                      <span className="text-red-500 text-sm">*</span>
+                    </Label>
+                    <Input 
+                      id="addressLine1" 
+                      {...register('contactInfo.address.addressLine1')} 
+                      placeholder="Enter address line 1"
+                      className={errors.contactInfo?.address?.addressLine1 ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                    />
                     {errors.contactInfo?.address?.addressLine1 && (
-                      <p className="text-red-500 text-xs">{errors.contactInfo.address.addressLine1.message}</p>
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {errors.contactInfo.address.addressLine1.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1354,24 +1648,57 @@ useEffect(() => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="city">City *</Label>
-                    <Input id="city" {...register('contactInfo.address.city')} placeholder="Enter city" />
+                    <Label htmlFor="city" className="flex items-center gap-1">
+                      City 
+                      <span className="text-red-500 text-sm">*</span>
+                    </Label>
+                    <Input 
+                      id="city" 
+                      {...register('contactInfo.address.city')} 
+                      placeholder="Enter city"
+                      className={errors.contactInfo?.address?.city ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                    />
                     {errors.contactInfo?.address?.city && (
-                      <p className="text-red-500 text-xs">{errors.contactInfo.address.city.message}</p>
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {errors.contactInfo.address.city.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="state">State *</Label>
-                    <Input id="state" {...register('contactInfo.address.state')} placeholder="Enter state" />
+                    <Label htmlFor="state" className="flex items-center gap-1">
+                      State 
+                      <span className="text-red-500 text-sm">*</span>
+                    </Label>
+                    <Input 
+                      id="state" 
+                      {...register('contactInfo.address.state')} 
+                      placeholder="Enter state"
+                      className={errors.contactInfo?.address?.state ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                    />
                     {errors.contactInfo?.address?.state && (
-                      <p className="text-red-500 text-xs">{errors.contactInfo.address.state.message}</p>
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {errors.contactInfo.address.state.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pincode">Pincode *</Label>
-                    <Input id="pincode" {...register('contactInfo.address.pincode')} placeholder="Enter pincode" />
+                    <Label htmlFor="pincode" className="flex items-center gap-1">
+                      Pincode 
+                      <span className="text-red-500 text-sm">*</span>
+                    </Label>
+                    <Input 
+                      id="pincode" 
+                      {...register('contactInfo.address.pincode')} 
+                      placeholder="Enter pincode"
+                      className={errors.contactInfo?.address?.pincode ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                    />
                     {errors.contactInfo?.address?.pincode && (
-                      <p className="text-red-500 text-xs">{errors.contactInfo.address.pincode.message}</p>
+                      <p className="text-red-500 text-xs flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {errors.contactInfo.address.pincode.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1435,8 +1762,17 @@ useEffect(() => {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="propertyId">Select Property *</Label>
-                <select id="propertyId" {...register('propertyId')} className="w-full px-3 py-2 border rounded-md">
+                <Label htmlFor="propertyId" className="flex items-center gap-1">
+                  Select Property 
+                  <span className="text-red-500 text-sm">*</span>
+                </Label>
+                <select 
+                  id="propertyId" 
+                  {...register('propertyId')} 
+                  className={`w-full px-3 py-2 border rounded-md ${
+                    errors.propertyId ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : 'border-gray-300'
+                  }`}
+                >
                   <option value="">Select Property</option>
                   {properties.map((property) => (
                     <option key={property._id} value={property._id}>
@@ -1445,7 +1781,10 @@ useEffect(() => {
                   ))}
                 </select>
                 {errors.propertyId && (
-                  <p className="text-red-500 text-xs">{errors.propertyId.message}</p>
+                  <p className="text-red-500 text-xs flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {errors.propertyId.message}
+                  </p>
                 )}
                 <input type="hidden" {...register('propertyName')} />
               </div>
@@ -1465,17 +1804,41 @@ useEffect(() => {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="monthlyRent">Monthly Rent *</Label>
-                  <Input id="monthlyRent" type="number" {...register('financials.payPerMonth', { valueAsNumber: true })} placeholder="Enter monthly rent" />
+                  <Label htmlFor="monthlyRent" className="flex items-center gap-1">
+                    Monthly Rent 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="monthlyRent" 
+                    type="number" 
+                    {...register('financials.payPerMonth', { valueAsNumber: true })} 
+                    placeholder="Enter monthly rent"
+                    className={errors.financials?.payPerMonth ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.financials?.payPerMonth && (
-                    <p className="text-red-500 text-xs">{errors.financials.payPerMonth.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.financials.payPerMonth.message}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="securityDeposit">Security Deposit *</Label>
-                  <Input id="securityDeposit" type="number" {...register('financials.deposit', { valueAsNumber: true })} placeholder="Enter deposit" />
+                  <Label htmlFor="securityDeposit" className="flex items-center gap-1">
+                    Security Deposit 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="securityDeposit" 
+                    type="number" 
+                    {...register('financials.deposit', { valueAsNumber: true })} 
+                    placeholder="Enter deposit"
+                    className={errors.financials?.deposit ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.financials?.deposit && (
-                    <p className="text-red-500 text-xs">{errors.financials.deposit.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.financials.deposit.message}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1489,26 +1852,59 @@ useEffect(() => {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="rentDueDate">Rent Due Date *</Label>
-                  <Input id="rentDueDate" type="date" {...register('financials.rentDueDate')} />
+                  <Label htmlFor="rentDueDate" className="flex items-center gap-1">
+                    Rent Due Date 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="rentDueDate" 
+                    type="date" 
+                    {...register('financials.rentDueDate')}
+                    className={errors.financials?.rentDueDate ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.financials?.rentDueDate && (
-                    <p className="text-red-500 text-xs">{errors.financials.rentDueDate.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.financials.rentDueDate.message}
+                    </p>
                   )}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="leaseStartDate">Lease Start Date *</Label>
-                  <Input id="leaseStartDate" type="date" {...register('leaseDetails.leaseStartDate')} />
+                  <Label htmlFor="leaseStartDate" className="flex items-center gap-1">
+                    Lease Start Date 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="leaseStartDate" 
+                    type="date" 
+                    {...register('leaseDetails.leaseStartDate')}
+                    className={errors.leaseDetails?.leaseStartDate ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.leaseDetails?.leaseStartDate && (
-                    <p className="text-red-500 text-xs">{errors.leaseDetails.leaseStartDate.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.leaseDetails.leaseStartDate.message}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="leaseEndDate">Lease End Date *</Label>
-                  <Input id="leaseEndDate" type="date" {...register('leaseDetails.leaseEndDate')} />
+                  <Label htmlFor="leaseEndDate" className="flex items-center gap-1">
+                    Lease End Date 
+                    <span className="text-red-500 text-sm">*</span>
+                  </Label>
+                  <Input 
+                    id="leaseEndDate" 
+                    type="date" 
+                    {...register('leaseDetails.leaseEndDate')}
+                    className={errors.leaseDetails?.leaseEndDate ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                  />
                   {errors.leaseDetails?.leaseEndDate && (
-                    <p className="text-red-500 text-xs">{errors.leaseDetails.leaseEndDate.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.leaseDetails.leaseEndDate.message}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1537,24 +1933,57 @@ useEffect(() => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`emergencyContactName-${index}`}>Contact Name *</Label>
-                      <Input id={`emergencyContactName-${index}`} {...register(`emergencyContacts.${index}.name`)} placeholder="Enter contact name" />
+                      <Label htmlFor={`emergencyContactName-${index}`} className="flex items-center gap-1">
+                        Contact Name 
+                        <span className="text-red-500 text-sm">*</span>
+                      </Label>
+                      <Input 
+                        id={`emergencyContactName-${index}`} 
+                        {...register(`emergencyContacts.${index}.name`)} 
+                        placeholder="Enter contact name"
+                        className={errors.emergencyContacts?.[index]?.name ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                      />
                       {errors.emergencyContacts?.[index]?.name && (
-                        <p className="text-red-500 text-xs">{errors.emergencyContacts[index].name.message}</p>
+                        <p className="text-red-500 text-xs flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {errors.emergencyContacts[index].name.message}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`emergencyContactRelation-${index}`}>Relationship *</Label>
-                      <Input id={`emergencyContactRelation-${index}`} {...register(`emergencyContacts.${index}.relation`)} placeholder="e.g., Father, Mother" />
+                      <Label htmlFor={`emergencyContactRelation-${index}`} className="flex items-center gap-1">
+                        Relationship 
+                        <span className="text-red-500 text-sm">*</span>
+                      </Label>
+                      <Input 
+                        id={`emergencyContactRelation-${index}`} 
+                        {...register(`emergencyContacts.${index}.relation`)} 
+                        placeholder="e.g., Father, Mother"
+                        className={errors.emergencyContacts?.[index]?.relation ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                      />
                       {errors.emergencyContacts?.[index]?.relation && (
-                        <p className="text-red-500 text-xs">{errors.emergencyContacts[index].relation.message}</p>
+                        <p className="text-red-500 text-xs flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {errors.emergencyContacts[index].relation.message}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`emergencyContactNumber-${index}`}>Contact Number *</Label>
-                      <Input id={`emergencyContactNumber-${index}`} {...register(`emergencyContacts.${index}.contactNumber`)} placeholder="Enter contact number" />
+                      <Label htmlFor={`emergencyContactNumber-${index}`} className="flex items-center gap-1">
+                        Contact Number 
+                        <span className="text-red-500 text-sm">*</span>
+                      </Label>
+                      <Input 
+                        id={`emergencyContactNumber-${index}`} 
+                        {...register(`emergencyContacts.${index}.contactNumber`)} 
+                        placeholder="Enter contact number"
+                        className={errors.emergencyContacts?.[index]?.contactNumber ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}
+                      />
                       {errors.emergencyContacts?.[index]?.contactNumber && (
-                        <p className="text-red-500 text-xs">{errors.emergencyContacts[index].contactNumber.message}</p>
+                        <p className="text-red-500 text-xs flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {errors.emergencyContacts[index].contactNumber.message}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1621,12 +2050,28 @@ useEffect(() => {
                     <textarea id="notes" {...register('notes')} rows={3} className="w-full px-3 py-2 border rounded-md" placeholder="Enter any additional notes" />
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input id="declaration" type="checkbox" {...register('declaration')} className="h-4 w-4" />
-                    <Label htmlFor="declaration" className="text-sm">I declare that all the information provided is correct and accurate *</Label>
+                  <div className="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <input 
+                      id="declaration" 
+                      type="checkbox" 
+                      {...register('declaration')} 
+                      className={`h-4 w-4 mt-1 ${errors.declaration ? 'border-red-500' : ''}`}
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="declaration" className="text-sm font-medium cursor-pointer flex items-center gap-2">
+                        I declare that all the information provided is correct and accurate 
+                        <span className="text-red-500 text-sm">*</span>
+                      </Label>
+                      <p className="text-xs text-gray-600 mt-1">
+                        By checking this box, you confirm that all information provided is true and complete.
+                      </p>
+                    </div>
                   </div>
                   {errors.declaration && (
-                    <p className="text-red-500 text-xs">{errors.declaration.message}</p>
+                    <p className="text-red-500 text-xs flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {errors.declaration.message}
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -1648,6 +2093,17 @@ useEffect(() => {
           </Button>
 
           <div className="flex gap-2">
+            {/* Validate Current Step Button
+            <Button
+              type="button"
+              variant="outline"
+              onClick={validateCurrentStepManually}
+              className="flex items-center gap-2 border-blue-300 text-blue-600 hover:bg-blue-50"
+            >
+              <CheckCircle className="h-4 w-4" />
+              Validate Step
+            </Button> */}
+            
             {currentStep === totalSteps ? (
               <Button
                 type="button"
@@ -1696,6 +2152,56 @@ useEffect(() => {
             >
               Go to Tenants
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Validation Error Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="text-center mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Validation Error</h3>
+              <p className="text-sm text-gray-600">
+                Please fix the following errors before proceeding:
+              </p>
+            </div>
+            
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 max-h-60 overflow-y-auto">
+              <ul className="text-sm text-red-700 space-y-2">
+                {validationErrors.map((error, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="text-red-500 mt-0.5">•</span>
+                    <span>{error}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setShowValidationModal(false)}
+                variant="outline"
+                className="flex-1"
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowValidationModal(false);
+                  // Navigate to the first step with errors if needed
+                  if (currentStep === totalSteps && validationErrors.length > 0) {
+                    setCurrentStep(1);
+                  }
+                }}
+                className="flex-1"
+              >
+                Fix Errors
+              </Button>
+            </div>
           </div>
         </div>
       )}

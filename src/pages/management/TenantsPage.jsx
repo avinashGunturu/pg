@@ -229,7 +229,10 @@ const TenantsPage = () => {
       setTenantToDelete(null);
       setShowDeleteSuccess(true);
       
-      setTimeout(() => setShowDeleteSuccess(false), 3000);
+      setTimeout(() => {
+        setShowDeleteSuccess(false)
+        window.location.reload();
+      }, 3000);
     } catch (error) {
       console.error('Error deleting tenant:', error);
       setDeleteErrorMessage(error.message || 'Failed to delete tenant');
@@ -549,11 +552,11 @@ const TenantsPage = () => {
                             Edit
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
+                        {/* <DropdownMenuItem asChild>
                           <Link to={`/app/tenants/${tenant.id}/lease`} className="cursor-pointer w-full">
                             Manage Lease
                           </Link>
-                        </DropdownMenuItem>
+                        </DropdownMenuItem> */}
                         <DropdownMenuItem asChild>
                           <Link to={`/app/tenants/${tenant.id}/payments`} className="cursor-pointer w-full">
                             <DollarSign className="mr-2 h-4 w-4" />
