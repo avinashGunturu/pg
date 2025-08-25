@@ -228,11 +228,6 @@ const TenantsPage = () => {
       setShowDeleteConfirm(false);
       setTenantToDelete(null);
       setShowDeleteSuccess(true);
-      
-      setTimeout(() => {
-        setShowDeleteSuccess(false)
-        window.location.reload();
-      }, 3000);
     } catch (error) {
       console.error('Error deleting tenant:', error);
       setDeleteErrorMessage(error.message || 'Failed to delete tenant');
@@ -630,7 +625,16 @@ const TenantsPage = () => {
               <BadgeCheck className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Success!</h3>
-            <p className="text-sm text-gray-600">Tenant has been deleted successfully.</p>
+            <p className="text-sm text-gray-600 mb-4">Tenant has been deleted successfully.</p>
+            <Button 
+              onClick={() => {
+                setShowDeleteSuccess(false);
+                window.location.reload();
+              }}
+              className="w-full"
+            >
+              OK
+            </Button>
           </div>
         </div>
       )}
