@@ -33,73 +33,114 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/services/apiClient';
+import transactionService from '@/services/api/transactionService';
 import { Badge } from '@/components/ui/badge';
 
-// Enhanced Zod Schema for Tenant
-const tenantSchema = z.object({
-  personalInfo: z.object({
-    firstName: z.string().min(1, 'First name is required'),
-    lastName: z.string().min(1, 'Last name is required'),
-    fatherFirstName: z.string().optional(),
-    fatherLastName: z.string().optional(),
-    gender: z.enum(['MALE', 'FEMALE', 'OTHER']).default('MALE'),
-    maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).default('SINGLE'),
-    age: z.number().min(18, 'Age must be at least 18').max(100, 'Please enter a valid age'),
-    dob: z.string().min(1, 'Date of birth is required'),
-  }),
-  contactInfo: z.object({
-    mobileNumber: z.string().min(10, 'Mobile number must be at least 10 digits'),
-    alternativeNumber: z.string().optional(),
-    email: z.string().email('Invalid email address').min(1, 'Email is required'),
-    address: z.object({
-      addressLine1: z.string().min(1, 'Address line 1 is required'),
-      addressLine2: z.string().optional(),
-      city: z.string().min(1, 'City is required'),
-      state: z.string().min(1, 'State is required'),
-      pincode: z.string().min(1, 'Pincode is required'),
-      country: z.string().default('India'),
+// Enhanced Zod Schema for Tenant - Dynamic based on edit mode
+const createTenantSchema = (isEditMode = false) => {
+  const baseSchema = z.object({
+    personalInfo: z.object({
+      firstName: z.string().min(1, 'First name is required'),
+      lastName: z.string().min(1, 'Last name is required'),
+      fatherFirstName: z.string().optional(),
+      fatherLastName: z.string().optional(),
+      gender: z.enum(['MALE', 'FEMALE', 'OTHER']).default('MALE'),
+      maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']).default('SINGLE'),
+      age: z.number().min(18, 'Age must be at least 18').max(100, 'Please enter a valid age'),
+      dob: z.string().min(1, 'Date of birth is required'),
     }),
-  }),
-  education: z.string().optional(),
-  employment: z.object({
-    designation: z.string().optional(),
-    presentEmployedAt: z.string().optional(),
-    officeMobileNumber: z.string().optional(),
-    officeAddress: z.object({
-      addressLine1: z.string().optional(),
-      addressLine2: z.string().optional(),
-      city: z.string().optional(),
-      state: z.string().optional(),
-      pincode: z.string().optional(),
-      country: z.string().default('India'),
+    contactInfo: z.object({
+      mobileNumber: z.string().min(10, 'Mobile number must be at least 10 digits'),
+      alternativeNumber: z.string().optional(),
+      email: z.string().email('Invalid email address').min(1, 'Email is required'),
+      address: z.object({
+        addressLine1: z.string().min(1, 'Address line 1 is required'),
+        addressLine2: z.string().optional(),
+        city: z.string().min(1, 'City is required'),
+        state: z.string().min(1, 'State is required'),
+        pincode: z.string().min(1, 'Pincode is required'),
+        country: z.string().default('India'),
+      }),
     }),
-  }),
-  propertyId: z.string().min(1, 'Property selection is required'),
-  propertyName: z.string().min(1, 'Property name is required'),
-  roomDetails: z.object({
-    floor: z.number().min(0, 'Floor must be 0 or greater'),
-    roomNumber: z.string().min(1, 'Room number is required'),
-    roomType: z.string().min(1, 'Room type is required'),
-  }),
-  financials: z.object({
-    payPerMonth: z.number().min(0, 'Rent amount must be positive'),
-    deposit: z.number().min(0, 'Deposit amount must be positive'),
-    paymentMethod: z.string().default('Bank Transfer'),
-    rentDueDate: z.string().min(1, 'Rent due date is required'),
-  }),
-  leaseDetails: z.object({
-    leaseStartDate: z.string().min(1, 'Lease start date is required'),
-    leaseEndDate: z.string().min(1, 'Lease end date is required'),
-  }),
-  emergencyContacts: z.array(z.object({
-    name: z.string().min(1, 'Contact name is required'),
-    relation: z.string().min(1, 'Relationship is required'),
-    contactNumber: z.string().min(10, 'Contact number must be at least 10 digits'),
-  })).min(1, 'At least one emergency contact is required'),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'EVICTED']).default('PENDING'),
-  declaration: z.boolean().refine(val => val === true, 'Declaration must be accepted'),
-  notes: z.string().optional(),
-});
+    education: z.string().optional(),
+    employment: z.object({
+      designation: z.string().optional(),
+      presentEmployedAt: z.string().optional(),
+      officeMobileNumber: z.string().optional(),
+      officeAddress: z.object({
+        addressLine1: z.string().optional(),
+        addressLine2: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        pincode: z.string().optional(),
+        country: z.string().default('India'),
+      }),
+    }),
+    propertyId: z.string().min(1, 'Property selection is required'),
+    propertyName: z.string().min(1, 'Property name is required'),
+    roomDetails: z.object({
+      floor: z.number().min(0, 'Floor must be 0 or greater'),
+      roomNumber: z.string().min(1, 'Room number is required'),
+      roomType: z.string().min(1, 'Room type is required'),
+    }),
+    financials: z.object({
+      payPerMonth: z.number().min(0, 'Rent amount must be positive'),
+      deposit: z.number().min(0, 'Deposit amount must be positive'),
+      paymentMethod: z.string().default('Bank Transfer'),
+      rentDueDate: z.string().min(1, 'Rent due date is required'),
+    }),
+    leaseDetails: z.object({
+      leaseStartDate: z.string().min(1, 'Lease start date is required'),
+      leaseEndDate: z.string().min(1, 'Lease end date is required'),
+    }),
+    emergencyContacts: z.array(z.object({
+      name: z.string().min(1, 'Contact name is required'),
+      relation: z.string().min(1, 'Relationship is required'),
+      contactNumber: z.string().min(10, 'Contact number must be at least 10 digits'),
+    })).min(1, 'At least one emergency contact is required'),
+    status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'EVICTED']).default('PENDING'),
+    declaration: z.boolean().refine(val => val === true, 'Declaration must be accepted'),
+    notes: z.string().optional(),
+  });
+
+  // Add date validations only for create mode (not edit mode)
+  if (!isEditMode) {
+    return baseSchema.refine((data) => {
+      const today = new Date();
+      const leaseStart = new Date(data.leaseDetails.leaseStartDate);
+      const leaseEnd = new Date(data.leaseDetails.leaseEndDate);
+      
+      // Lease start date should not be too far in the past (allow 30 days grace period)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      
+      if (leaseStart < thirtyDaysAgo) {
+        return false;
+      }
+      
+      // Lease end date should be after start date
+      if (leaseEnd <= leaseStart) {
+        return false;
+      }
+      
+      return true;
+    }, {
+      message: 'Please check lease dates. Start date should not be more than 30 days in the past and end date should be after start date.',
+      path: ['leaseDetails', 'leaseStartDate'],
+    });
+  }
+  
+  // For edit mode, only validate that end date is after start date
+  return baseSchema.refine((data) => {
+    const leaseStart = new Date(data.leaseDetails.leaseStartDate);
+    const leaseEnd = new Date(data.leaseDetails.leaseEndDate);
+    
+    return leaseEnd > leaseStart;
+  }, {
+    message: 'Lease end date should be after start date.',
+    path: ['leaseDetails', 'leaseEndDate'],
+  });
+};
 
 const AddTenantPage = () => {
   const { id } = useParams();
@@ -119,6 +160,10 @@ const AddTenantPage = () => {
   const [validationErrors, setValidationErrors] = useState([]);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [profilePicture, setProfilePicture] = useState(null);
+  const [createdTenantId, setCreatedTenantId] = useState(null);
+  const [createdTransactionId, setCreatedTransactionId] = useState(null);
+  const [createdDepositTransactionId, setCreatedDepositTransactionId] = useState(null);
+  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
 
   const totalSteps = 7;
   
@@ -133,7 +178,7 @@ const AddTenantPage = () => {
     trigger,
     formState: { errors },
   } = useForm({
-    resolver: zodResolver(tenantSchema),
+    resolver: zodResolver(createTenantSchema(isEditMode)),
     defaultValues: {
       personalInfo: {
         firstName: '',
@@ -1054,22 +1099,128 @@ useEffect(() => {
           tenantId: id,
           updateData: tenantData
         });
+        
+        if (response?.data && (response.data.code === 0 || response.data.success || response.status === 200)) {
+          console.log('Tenant updated successfully');
+          setShowSuccessModal(true);
+        } else {
+          const errorMsg = response?.data?.message || response?.data?.error || 'Failed to update tenant';
+          throw new Error(errorMsg);
+        }
       } else {
         console.log('Creating new tenant');
         response = await apiClient.post('/api/tenant/create', tenantData);
-      }
+        
+        if (response?.data && (response.data.code === 0 || response.data.success || response.status === 200)) {
+          console.log('Tenant created successfully');
+          
+          // Extract tenant ID from response
+          const tenantId = response.data?.data?._id || response.data?._id || response.data?._id;
+          setCreatedTenantId(tenantId);
+          
+          // For new tenants, create both RENT and DEPOSIT transactions
+          try {
+            setIsCreatingTransaction(true);
+            console.log('Creating rent and deposit transactions for new tenant...');
+            
+            const currentDate = new Date().toISOString().split('T')[0];
+            
+            // 1. Create RENT transaction with PENDING status
+            const rentTransactionData = {
+              ownerId: ownerId,
+              propertyId: data.propertyId,
+              tenantId: tenantId,
+              transactionType: 'RENT',
+              transactionSubType: 'monthly_rent',
+              amount: data.financials.payPerMonth,
+              currency: 'INR',
+              transactionDate: currentDate,
+              actualPaymentDate: currentDate,
+              paidDate: '',
+              paymentMethod: data.financials.paymentMethod || 'Bank Transfer',
+              status: 'PENDING',
+              description: `Monthly rent for ${data.personalInfo.firstName} ${data.personalInfo.lastName} - Room ${data.roomDetails.roomNumber}`,
+              externalPaymentId: '',
+              rentDetails: {
+                rentStartDate: data.leaseDetails.leaseStartDate,
+                rentEndDate: data.leaseDetails.leaseEndDate,
+              },
+              incomeDetails: {
+                source: 'Rent Payment',
+                receivedFrom: `${data.personalInfo.firstName} ${data.personalInfo.lastName}`,
+                paymentReference: '',
+                notes: `Auto-generated rent transaction for new tenant`,
+              },
+            };
+            
+            console.log('Creating rent transaction:', rentTransactionData);
+            const rentTransactionResponse = await transactionService.createTransaction(rentTransactionData);
+            console.log('rent transaction: res', rentTransactionResponse);
+            
+            if (rentTransactionResponse && (rentTransactionResponse.code === 0 || rentTransactionResponse.success)) {
+              console.log('Rent transaction created successfully');
+              const rentTransactionId = rentTransactionResponse?.data?._id || rentTransactionResponse?.data?._id ;
+              setCreatedTransactionId(rentTransactionId);
+            } else {
+              console.warn('Rent transaction creation failed');
+            }
+            
+            // 2. Create INCOME transaction for deposit (only if deposit amount > 0)
+            if (data.financials.deposit && data.financials.deposit > 0) {
+              const depositTransactionData = {
+                ownerId: ownerId,
+                propertyId: data.propertyId,
+                tenantId: tenantId,
+                transactionType: 'INCOME',
+                transactionSubType: 'security_deposit',
+                amount: data.financials.deposit,
+                currency: 'INR',
+                transactionDate: currentDate,
+                actualPaymentDate: currentDate,
+                paidDate: currentDate,
+                paymentMethod: data.financials.paymentMethod || 'Bank Transfer',
+                status: 'PAID',
+                description: `Security deposit from ${data.personalInfo.firstName} ${data.personalInfo.lastName} - Room ${data.roomDetails.roomNumber}`,
+                externalPaymentId: '',
+                incomeDetails: {
+                  source: 'Security Deposit',
+                  receivedFrom: `${data.personalInfo.firstName} ${data.personalInfo.lastName}`,
+                  paymentReference: '',
+                  notes: `Auto-generated deposit transaction for new tenant`,
+                },
+              };
+              
+              console.log('Creating deposit transaction:', depositTransactionData);
+              const depositTransactionResponse = await transactionService.createTransaction(depositTransactionData);
 
-      if (response?.data && (response.data.code === 0 || response.data.success || response.status === 200)) {
-        console.log('Tenant saved successfully');
-        setShowSuccessModal(true);
-        if (!isEditMode) {
+              console.log('Creating deposit transaction: respoanse', depositTransactionResponse);
+
+              
+              if (depositTransactionResponse && (depositTransactionResponse.code === 0 || depositTransactionResponse.success)) {
+                console.log('Deposit transaction created successfully');
+                const depositTransactionId = depositTransactionResponse.data?._id || depositTransactionResponse?._id ;
+                setCreatedDepositTransactionId(depositTransactionId);
+              } else {
+                console.warn('Deposit transaction creation failed');
+              }
+            }
+            
+          } catch (transactionError) {
+            console.error('Error creating transactions:', transactionError);
+            // Don't fail the entire process if transaction creation fails
+            console.warn('Tenant created successfully, but transaction creation failed');
+          } finally {
+            setIsCreatingTransaction(false);
+          }
+          
+          setShowSuccessModal(true);
           reset();
           setUploadedDocuments([]);
           setProfilePicture(null);
+        } else {
+          const errorMsg = response?.data?.message || response?.data?.error || 'Failed to create tenant';
+          throw new Error(errorMsg);
         }
-      } else {
-        const errorMsg = response?.data?.message || response?.data?.error || 'Failed to save tenant';
-        throw new Error(errorMsg);
       }
 
     } catch (err) {
@@ -2112,11 +2263,21 @@ useEffect(() => {
                 className="flex items-center gap-2"
               >
                 {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {isEditMode 
+                      ? 'Updating Tenant...' 
+                      : isCreatingTransaction 
+                        ? 'Creating Transaction...' 
+                        : 'Creating Tenant...'
+                    }
+                  </>
                 ) : (
-                  <CheckCircle className="h-4 w-4" />
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    {isEditMode ? 'Update Tenant' : 'Create Tenant'}
+                  </>
                 )}
-                {isEditMode ? 'Update Tenant' : 'Create Tenant'}
               </Button>
             ) : (
               <Button
@@ -2135,23 +2296,104 @@ useEffect(() => {
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full text-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full text-center">
             <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Success!</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Tenant has been {isEditMode ? 'updated' : 'created'} successfully.
-            </p>
-            <Button
-              onClick={() => {
-                setShowSuccessModal(false);
-                navigate('/app/tenants');
-              }}
-              className="w-full"
-            >
-              Go to Tenants
-            </Button>
+            
+            {isEditMode ? (
+              <p className="text-sm text-gray-600 mb-4">
+                Tenant has been updated successfully.
+              </p>
+            ) : (
+              <div className="text-sm text-gray-600 mb-4 space-y-2">
+                <p className="font-medium text-green-700">✅ Tenant created successfully</p>
+                {createdTransactionId ? (
+                  <p className="font-medium text-green-700">✅ Rent transaction created successfully</p>
+                ) : (
+                  <p className="font-medium text-amber-700">⚠️ Rent transaction creation failed</p>
+                )}
+                {createdDepositTransactionId ? (
+                  <p className="font-medium text-green-700">✅ Deposit transaction created successfully</p>
+                ) : watch('financials.deposit') > 0 ? (
+                  <p className="font-medium text-amber-700">⚠️ Deposit transaction creation failed</p>
+                ) : (
+                  <p className="font-medium text-gray-600">ℹ️ No deposit transaction (amount: ₹0)</p>
+                )}
+                <div className="bg-gray-50 p-3 rounded-md mt-3 text-left">
+                  <p className="text-xs text-gray-500 mb-1">Created:</p>
+                  <p className="text-xs">• Tenant record</p>
+                  {createdTransactionId && <p className="text-xs">• Pending rent transaction</p>}
+                  {createdDepositTransactionId && <p className="text-xs">• Paid deposit transaction</p>}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex space-x-2">
+              <Button 
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setCreatedTenantId(null);
+                  setCreatedTransactionId(null);
+                  setCreatedDepositTransactionId(null);
+                  navigate('/app/tenants');
+                }}
+                className="flex-1"
+              >
+                Go to Tenants
+              </Button>
+              {createdTenantId && (
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setCreatedTenantId(null);
+                    setCreatedTransactionId(null);
+                    setCreatedDepositTransactionId(null);
+                    navigate(`/app/tenants/${createdTenantId}`);
+                  }}
+                  className="flex-1"
+                >
+                  View Tenant
+                </Button>
+              )}
+            </div>
+            
+            {(createdTransactionId || createdDepositTransactionId) && (
+              <div className="flex space-x-2 mt-2">
+                {createdTransactionId && (
+                  <Button 
+                    variant="link"
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setCreatedTenantId(null);
+                      setCreatedTransactionId(null);
+                      setCreatedDepositTransactionId(null);
+                      navigate(`/app/financial/transactions/${createdTransactionId}`);
+                    }}
+                    className="flex-1 text-xs"
+                  >
+                    View Rent Transaction
+                  </Button>
+                )}
+                {createdDepositTransactionId && (
+                  <Button 
+                    variant="link"
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setCreatedTenantId(null);
+                      setCreatedTransactionId(null);
+                      setCreatedDepositTransactionId(null);
+                      navigate(`/app/financial/transactions/${createdDepositTransactionId}`);
+                    }}
+                    className="flex-1 text-xs"
+                  >
+                    View Deposit Transaction
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
