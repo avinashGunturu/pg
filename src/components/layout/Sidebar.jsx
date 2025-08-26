@@ -47,7 +47,7 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       submenu: [
         { title: 'All Tenants', href: '/app/tenants' },
         { title: 'Add Tenant', href: '/app/tenants/add' },
-        { title: 'Lease Agreements', href: '/app/tenants/leases' },
+        // { title: 'Lease Agreements', href: '/app/tenants/leases' },
       ],
     },
     {
@@ -77,8 +77,8 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       submenu: [
         { title: 'Transactions', href: '/app/financial' },
         { title: 'Add/Edit Transactions', href: '/app/financial/transactions/add' },
-        { title: 'Invoices', href: '/app/financial/invoices' },
-        { title: 'Expenses', href: '/app/financial/expenses' },
+        // { title: 'Invoices', href: '/app/financial/invoices' },
+        // { title: 'Expenses', href: '/app/financial/expenses' },
       ],
     },
     {

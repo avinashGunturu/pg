@@ -107,7 +107,7 @@ const EditTransactionPage = () => {
       // Update the transaction using the service
       const response = await transactionService.updateTransaction(id, formData);
       
-      toast.success('Transaction updated successfully!');
+      // Only show modal, no toast (prevents duplicate notifications)
       setShowSuccessModal(true);
       
     } catch (error) {
@@ -125,7 +125,7 @@ const EditTransactionPage = () => {
       
       setErrorMessage(errorMsg);
       setShowErrorModal(true);
-      toast.error(errorMsg);
+      // Only show modal, no toast (prevents duplicate notifications)
     } finally {
       setIsSubmitting(false);
     }

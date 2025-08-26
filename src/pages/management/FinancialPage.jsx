@@ -39,6 +39,7 @@ const FinancialPage = () => {
   const [isDeleting, setIsDeleting] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
   
   // Fetch properties and tenants for filtering
   const { data: properties = [], isError: propertiesError } = useProperties();
@@ -57,6 +58,7 @@ const FinancialPage = () => {
         ...(dateRange.endDate && { endDate: dateRange.endDate }),
       };
       
+      console.log('🚀 Fetching transactions with filters:', filters);
       const response = await transactionService.getTransactions(filters);
       
       // Handle different possible response structures
@@ -75,11 +77,17 @@ const FinancialPage = () => {
       
       // Ensure we always have an array
       const finalTransactions = Array.isArray(transactionData) ? transactionData : [];
+      console.log('✅ Loaded', finalTransactions.length, 'transactions');
       
       setTransactions(finalTransactions);
+      
+      if (finalTransactions.length === 0 && Object.keys(filters).length > 1) {
+        toast.info('No transactions found for the current filters');
+      }
+      
     } catch (error) {
-      console.error('Error fetching transactions:', error);
-      toast.error('Failed to fetch transactions');
+      console.error('❌ Error fetching transactions:', error);
+      toast.error(`Failed to fetch transactions: ${error.message || 'Unknown error'}`);
       // Ensure we always have an empty array on error
       setTransactions([]);
     } finally {
@@ -91,6 +99,20 @@ const FinancialPage = () => {
   useEffect(() => {
     fetchTransactions();
   }, [ownerId, propertyFilter, statusFilter, dateRange]);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilters && !event.target.closest('.filter-dropdown')) {
+        setShowFilters(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilters]);
 
   // Filter transactions based on search and tab
   const filteredTransactions = (Array.isArray(transactions) ? transactions : []).filter(transaction => {
@@ -104,10 +126,9 @@ const FinancialPage = () => {
     
     // Tab filter
     if (activeTab === 'all') return matchesSearch;
-    if (activeTab === 'income') return matchesSearch && (transaction.transactionType === 'INCOME' || transaction.transactionType === 'RENT');
+    if (activeTab === 'income') return matchesSearch && transaction.transactionType === 'INCOME';
     if (activeTab === 'expense') return matchesSearch && transaction.transactionType === 'EXPENSE';
-    if (activeTab === 'pending') return matchesSearch && transaction.status === 'PENDING';
-    if (activeTab === 'due') return matchesSearch && transaction.status === 'DUE';
+    if (activeTab === 'rent') return matchesSearch && transaction.transactionType === 'RENT';
     
     return matchesSearch;
   });
@@ -185,6 +206,9 @@ const FinancialPage = () => {
     return tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unknown Tenant';
   };
 
+  // Check if any filters are active
+  const hasActiveFilters = propertyFilter || statusFilter || dateRange.startDate || dateRange.endDate;
+
   // Calculate totals
   const totals = (Array.isArray(filteredTransactions) ? filteredTransactions : []).reduce((acc, transaction) => {
     const amount = Number(transaction.amount || 0);
@@ -251,70 +275,6 @@ const FinancialPage = () => {
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Property</label>
-              <Select value={propertyFilter} onValueChange={setPropertyFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Properties" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Properties</SelectItem>
-                  {propertiesError ? (
-                    <SelectItem value="error" disabled>Error loading properties</SelectItem>
-                  ) : properties.length > 0 ? (
-                    properties.map((property) => (
-                      <SelectItem key={property._id || property.id} value={property._id || property.id}>
-                        {property.propertyName || property.name || property.title}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-data" disabled>No properties available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="PAID">Paid</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="DUE">Due</SelectItem>
-                  <SelectItem value="FAILED">Failed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Start Date</label>
-              <Input
-                type="date"
-                value={dateRange.startDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">End Date</label>
-              <Input
-                type="date"
-                value={dateRange.endDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Transactions Table */}
       <Card>
         <CardHeader>
@@ -334,9 +294,119 @@ const FinancialPage = () => {
                   onChange={handleSearchChange}
                 />
               </div>
-              <Button variant="outline" size="icon" onClick={fetchTransactions}>
-                <Filter className="h-4 w-4" />
-              </Button>
+              <div className="relative">
+                <Button 
+                  variant={showFilters ? "default" : "outline"} 
+                  size="icon" 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`relative ${hasActiveFilters && !showFilters ? 'border-primary' : ''}`}
+                  title={showFilters ? 'Hide filters' : 'Show filters'}
+                >
+                  <Filter className="h-4 w-4" />
+                  {hasActiveFilters && !showFilters && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-primary rounded-full"></span>
+                  )}
+                </Button>
+                
+                {/* Filter dropdown positioned below the button */}
+                {showFilters && (
+                  <div className="filter-dropdown absolute top-full right-0 mt-2 w-96 bg-white border rounded-lg shadow-lg p-4 z-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-medium">Filters</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          // Reset all filters
+                          setPropertyFilter('');
+                          setStatusFilter('');
+                          setDateRange({ startDate: '', endDate: '' });
+                          toast.info('Filters cleared');
+                          // Immediately fetch with cleared filters
+                          setTimeout(() => {
+                            fetchTransactions();
+                          }, 100);
+                        }}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <div className="grid gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Property</label>
+                        <Select value={propertyFilter} onValueChange={(value) => {
+                          setPropertyFilter(value);
+                          // Auto-apply filter after a short delay
+                          setTimeout(fetchTransactions, 300);
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Properties" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Properties</SelectItem>
+                            {propertiesError ? (
+                              <SelectItem value="error" disabled>Error loading properties</SelectItem>
+                            ) : properties.length > 0 ? (
+                              properties.map((property) => (
+                                <SelectItem key={property._id || property.id} value={property._id || property.id}>
+                                  {property.propertyName || property.name || property.title}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no-data" disabled>No properties available</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Status</label>
+                        <Select value={statusFilter} onValueChange={(value) => {
+                          setStatusFilter(value);
+                          // Auto-apply filter after a short delay
+                          setTimeout(fetchTransactions, 300);
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="PAID">Paid</SelectItem>
+                            <SelectItem value="PENDING">Pending</SelectItem>
+                            <SelectItem value="DUE">Due</SelectItem>
+                            <SelectItem value="FAILED">Failed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Start Date</label>
+                          <Input
+                            type="date"
+                            value={dateRange.startDate}
+                            onChange={(e) => {
+                              setDateRange(prev => ({ ...prev, startDate: e.target.value }));
+                              // Auto-apply filter after a short delay
+                              setTimeout(fetchTransactions, 500);
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">End Date</label>
+                          <Input
+                            type="date"
+                            value={dateRange.endDate}
+                            onChange={(e) => {
+                              setDateRange(prev => ({ ...prev, endDate: e.target.value }));
+                              // Auto-apply filter after a short delay
+                              setTimeout(fetchTransactions, 500);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -345,9 +415,8 @@ const FinancialPage = () => {
             <TabsList>
               <TabsTrigger value="all">All Transactions</TabsTrigger>
               <TabsTrigger value="income">Income</TabsTrigger>
-              <TabsTrigger value="expense">Expenses</TabsTrigger>
-              <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="due">Due</TabsTrigger>
+              <TabsTrigger value="expense">Expense</TabsTrigger>
+              <TabsTrigger value="rent">Rent</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -357,10 +426,10 @@ const FinancialPage = () => {
             </div>
           ) : (
             <div className="rounded-md border">
-              <div className="grid grid-cols-12 bg-muted p-4 font-medium">
-                <div className="col-span-1">Type</div>
+              <div className="grid grid-cols-12 bg-muted p-4 font-medium gap-x-2">
+                <div className="col-span-2">Type</div>
                 <div className="col-span-2">Date</div>
-                <div className="col-span-3">Description</div>
+                <div className="col-span-2">Description</div>
                 <div className="col-span-2">Property</div>
                 <div className="col-span-1">Status</div>
                 <div className="col-span-2 text-right">Amount</div>
@@ -372,23 +441,23 @@ const FinancialPage = () => {
                 </div>
               ) : (
                 filteredTransactions.map((transaction) => (
-                  <div key={transaction._id || transaction.id} className="grid grid-cols-12 p-4 border-t items-center">
-                    <div className="col-span-1 font-medium">
+                  <div key={transaction._id || transaction.id} className="grid grid-cols-12 p-4 border-t items-center gap-x-2">
+                    <div className="col-span-2 font-medium">
                       <div className="flex items-center">
                         {getTransactionIcon(transaction.transactionType)}
-                        <span className="ml-1">{transaction.transactionSubType || transaction.transactionType}</span>
+                        <span className="ml-1 text-sm">{transaction.transactionSubType || transaction.transactionType}</span>
                       </div>
                     </div>
                     <div className="col-span-2">
-                      <div>{formatDate(transaction.transactionDate)}</div>
+                      <div className="text-sm">{formatDate(transaction.transactionDate)}</div>
                       {transaction.actualPaymentDate !== transaction.transactionDate && (
                         <div className="text-xs text-muted-foreground">
                           Paid: {formatDate(transaction.actualPaymentDate)}
                         </div>
                       )}
                     </div>
-                    <div className="col-span-3">
-                      <div>{transaction.description || 'No description'}</div>
+                    <div className="col-span-2">
+                      <div className="text-sm">{transaction.description || 'No description'}</div>
                       <div className="text-xs text-muted-foreground">
                         {transaction.externalPaymentId ? `Ref: ${transaction.externalPaymentId}` : 'No reference'}
                       </div>
@@ -398,7 +467,7 @@ const FinancialPage = () => {
                         </div>
                       )}
                     </div>
-                    <div className="col-span-2">
+                    <div className="col-span-2 text-sm">
                       {getPropertyName(transaction.propertyId)}
                     </div>
                     <div className="col-span-1">
@@ -452,8 +521,8 @@ const FinancialPage = () => {
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      <div className="flex justify-between">
+      {/* Action Buttons - Commented out as requested */}
+      {/* <div className="flex justify-between">
         <Button variant="outline" asChild>
           <Link to="/app/dashboard/reports">
             <FileText className="mr-2 h-4 w-4" />
@@ -463,7 +532,7 @@ const FinancialPage = () => {
         <Button variant="outline" onClick={() => toast.info('Export feature coming soon!')}>
           Export Transactions
         </Button>
-      </div>
+      </div> */}
       
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

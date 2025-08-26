@@ -26,7 +26,7 @@ const AddTransactionPage = () => {
       const transactionId = response.data?.transaction?._id || response.transaction?._id || response._id;
       setCreatedTransactionId(transactionId);
       
-      toast.success('Transaction created successfully!');
+      // Only show modal, no toast (prevents duplicate notifications)
       setShowSuccessModal(true);
       
     } catch (error) {
@@ -44,7 +44,7 @@ const AddTransactionPage = () => {
       
       setErrorMessage(errorMsg);
       setShowErrorModal(true);
-      toast.error(errorMsg);
+      // Only show modal, no toast (prevents duplicate notifications)
     } finally {
       setIsSubmitting(false);
     }

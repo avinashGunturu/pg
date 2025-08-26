@@ -254,10 +254,11 @@ const TransactionForm = ({
       }
       
       await onSubmit(transactionData);
-      toast.success(`Transaction ${isEditing ? 'updated' : 'created'} successfully!`);
+      // Remove toast from form - let the parent page handle success/error messages
     } catch (error) {
       console.error('Error submitting form:', error);
-      toast.error(`Failed to ${isEditing ? 'update' : 'create'} transaction. Please try again.`);
+      // Let the parent component handle error display
+      throw error; // Re-throw to let parent handle the error
     } finally {
       setIsSubmitting(false);
     }
@@ -808,10 +809,7 @@ const TransactionForm = ({
         )}
 
         {/* Submit Buttons */}
-        <div className="flex justify-end space-x-4 pt-6">
-          <Button type="button" variant="outline" onClick={() => form.reset()}>
-            Reset
-          </Button>
+        <div className="flex justify-end pt-6">
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Saving...' : isEditing ? 'Update Transaction' : 'Create Transaction'}
           </Button>
