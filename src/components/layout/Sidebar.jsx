@@ -88,7 +88,7 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       submenu: [
         { title: 'Financial Reports', href: '/app/reports/financial' },
         { title: 'Occupancy Reports', href: '/app/reports/occupancy' },
-        { title: 'Maintenance Reports', href: '/app/reports/maintenance' },
+        // { title: 'Maintenance Reports', href: '/app/reports/maintenance' },
       ],
     },
     // {
