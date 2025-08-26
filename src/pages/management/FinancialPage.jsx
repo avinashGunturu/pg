@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { DollarSign, Plus, Search, Filter, MoreHorizontal, Edit, Trash2, ArrowUpRight, ArrowDownRight, FileText, Eye } from 'lucide-react';
 import {
   DropdownMenu,
@@ -99,20 +100,6 @@ const FinancialPage = () => {
   useEffect(() => {
     fetchTransactions();
   }, [ownerId, propertyFilter, statusFilter, dateRange]);
-
-  // Close filter dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showFilters && !event.target.closest('.filter-dropdown')) {
-        setShowFilters(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showFilters]);
 
   // Filter transactions based on search and tab
   const filteredTransactions = (Array.isArray(transactions) ? transactions : []).filter(transaction => {
@@ -294,121 +281,81 @@ const FinancialPage = () => {
                   onChange={handleSearchChange}
                 />
               </div>
-              <div className="relative">
-                <Button 
-                  variant={showFilters ? "default" : "outline"} 
-                  size="icon" 
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`relative ${hasActiveFilters && !showFilters ? 'border-primary' : ''}`}
-                  title={showFilters ? 'Hide filters' : 'Show filters'}
-                >
-                  <Filter className="h-4 w-4" />
-                  {hasActiveFilters && !showFilters && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-primary rounded-full"></span>
-                  )}
-                </Button>
-                
-                {/* Filter dropdown positioned below the button */}
-                {showFilters && (
-                  <div className="filter-dropdown absolute top-full right-0 mt-2 w-96 bg-white border rounded-lg shadow-lg p-4 z-50">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-medium">Filters</h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          // Reset all filters
-                          setPropertyFilter('');
-                          setStatusFilter('');
-                          setDateRange({ startDate: '', endDate: '' });
-                          toast.info('Filters cleared');
-                          // Immediately fetch with cleared filters
-                          setTimeout(() => {
-                            fetchTransactions();
-                          }, 100);
-                        }}
-                      >
-                        Clear All
-                      </Button>
-                    </div>
-                    <div className="grid gap-4">
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">Property</label>
-                        <Select value={propertyFilter} onValueChange={(value) => {
-                          setPropertyFilter(value);
-                          // Auto-apply filter after a short delay
-                          setTimeout(fetchTransactions, 300);
-                        }}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="All Properties" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Properties</SelectItem>
-                            {propertiesError ? (
-                              <SelectItem value="error" disabled>Error loading properties</SelectItem>
-                            ) : properties.length > 0 ? (
-                              properties.map((property) => (
-                                <SelectItem key={property._id || property.id} value={property._id || property.id}>
-                                  {property.propertyName || property.name || property.title}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="no-data" disabled>No properties available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">Status</label>
-                        <Select value={statusFilter} onValueChange={(value) => {
-                          setStatusFilter(value);
-                          // Auto-apply filter after a short delay
-                          setTimeout(fetchTransactions, 300);
-                        }}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="All Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="PAID">Paid</SelectItem>
-                            <SelectItem value="PENDING">Pending</SelectItem>
-                            <SelectItem value="DUE">Due</SelectItem>
-                            <SelectItem value="FAILED">Failed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-sm font-medium mb-2 block">Start Date</label>
-                          <Input
-                            type="date"
-                            value={dateRange.startDate}
-                            onChange={(e) => {
-                              setDateRange(prev => ({ ...prev, startDate: e.target.value }));
-                              // Auto-apply filter after a short delay
-                              setTimeout(fetchTransactions, 500);
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium mb-2 block">End Date</label>
-                          <Input
-                            type="date"
-                            value={dateRange.endDate}
-                            onChange={(e) => {
-                              setDateRange(prev => ({ ...prev, endDate: e.target.value }));
-                              // Auto-apply filter after a short delay
-                              setTimeout(fetchTransactions, 500);
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Button 
+                variant="outline" 
+                size="icon"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
             </div>
           </div>
+          
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Property</Label>
+                  <select
+                    className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md"
+                    value={propertyFilter}
+                    onChange={(e) => setPropertyFilter(e.target.value)}
+                  >
+                    <option value="">All Properties</option>
+                    {properties.map((property) => (
+                      <option key={property._id || property.id} value={property._id || property.id}>
+                        {property.propertyName || property.name || property.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <select
+                    className="w-full px-3 py-2 text-gray-900 bg-white border border-gray-300 rounded-md"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="">All Status</option>
+                    <option value="PAID">Paid</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="DUE">Due</option>
+                    <option value="FAILED">Failed</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    value={dateRange.startDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={dateRange.endDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setPropertyFilter('');
+                      setStatusFilter('');
+                      setDateRange({ startDate: '', endDate: '' });
+                    }} 
+                    className="w-full"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="all" className="mb-6" onValueChange={setActiveTab}>
