@@ -26,10 +26,10 @@ transactionAPI.interceptors.request.use(
 
 // Transaction services
 const transactionService = {
-  // Get all transactions
-  getAllTransactions: async (params = {}) => {
+  // Get list of transactions with filters
+  getTransactions: async (filters = {}) => {
     try {
-      const response = await transactionAPI.get('/', { params });
+      const response = await transactionAPI.post('/list', filters);
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -39,7 +39,7 @@ const transactionService = {
   // Get transaction by ID
   getTransactionById: async (id) => {
     try {
-      const response = await transactionAPI.get(`/${id}`);
+      const response = await transactionAPI.post('/list', { transactionId: id });
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -49,7 +49,7 @@ const transactionService = {
   // Create new transaction
   createTransaction: async (transactionData) => {
     try {
-      const response = await transactionAPI.post('/', transactionData);
+      const response = await transactionAPI.post('/create', transactionData);
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -57,9 +57,12 @@ const transactionService = {
   },
 
   // Update transaction
-  updateTransaction: async (id, transactionData) => {
+  updateTransaction: async (transactionId, updateData) => {
     try {
-      const response = await transactionAPI.put(`/${id}`, transactionData);
+      const response = await transactionAPI.put('/update', {
+        transactionId,
+        updateData
+      });
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
@@ -67,9 +70,21 @@ const transactionService = {
   },
 
   // Delete transaction
-  deleteTransaction: async (id) => {
+  deleteTransaction: async (transactionId) => {
     try {
-      const response = await transactionAPI.delete(`/${id}`);
+      const response = await transactionAPI.post('/delete', {
+        transactionId
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  },
+
+  // Get all transactions (backward compatibility)
+  getAllTransactions: async (params = {}) => {
+    try {
+      const response = await transactionAPI.post('/list', params);
       return response.data;
     } catch (error) {
       throw error.response?.data || error;

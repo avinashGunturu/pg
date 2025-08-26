@@ -37,6 +37,9 @@ import AddEmployeePage from '@/pages/management/AddEmployeePage'
 import EmployeeDetailsPage from '@/pages/management/EmployeeDetailsPage'
 import InventoryPage from '@/pages/management/InventoryPage'
 import FinancialPage from '@/pages/management/FinancialPage'
+import AddTransactionPage from '@/pages/management/AddTransactionPage'
+import EditTransactionPage from '@/pages/management/EditTransactionPage'
+import TransactionDetailsPage from '@/pages/management/TransactionDetailsPage'
 
 // Profile Page
 import ProfilePage from '@/pages/profile/ProfilePage'
@@ -114,6 +117,9 @@ function App() {
             <Route path="inventory/categories" element={<div className="p-4">Inventory Categories Content (To be implemented)</div>} />
             
             <Route path="financial" element={<FinancialPage />} />
+            <Route path="financial/transactions/add" element={<AddTransactionPage />} />
+            <Route path="financial/transactions/:id" element={<TransactionDetailsPage />} />
+            <Route path="financial/transactions/:id/edit" element={<EditTransactionPage />} />
             <Route path="financial/invoices" element={<div className="p-4">Invoices Content (To be implemented)</div>} />
             <Route path="financial/expenses" element={<div className="p-4">Expenses Content (To be implemented)</div>} />
             

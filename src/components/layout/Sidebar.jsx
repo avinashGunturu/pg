@@ -76,6 +76,7 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       icon: <DollarSign size={20} />,
       submenu: [
         { title: 'Transactions', href: '/app/financial' },
+        { title: 'Add/Edit Transactions', href: '/app/financial/transactions/add' },
         { title: 'Invoices', href: '/app/financial/invoices' },
         { title: 'Expenses', href: '/app/financial/expenses' },
       ],

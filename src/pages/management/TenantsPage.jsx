@@ -119,9 +119,9 @@ const TenantsPage = () => {
           
           // Calculate stats
           const totalTenants = mappedTenants.length;
-          const activeTenants = mappedTenants.filter(tenant => tenant.status === 'ACTIVE').length;
-          const pendingTenants = mappedTenants.filter(tenant => tenant.status === 'PENDING').length;
-          const inactiveTenants = mappedTenants.filter(tenant => tenant.status === 'INACTIVE').length;
+          const activeTenants = mappedTenants?.filter(tenant => tenant.status === 'ACTIVE').length;
+          const pendingTenants = mappedTenants?.filter(tenant => tenant.status === 'PENDING').length;
+          const inactiveTenants = mappedTenants?.filter(tenant => tenant.status === 'INACTIVE').length;
           
           setStats({
             totalTenants,
@@ -182,7 +182,7 @@ const TenantsPage = () => {
     }
   }, [ownerId]);
 
-  const filteredTenants = tenants.filter(tenant =>
+  const filteredTenants = tenants?.filter(tenant =>
     tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     tenant.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -224,7 +224,7 @@ const TenantsPage = () => {
       });
       
       // Remove from local state
-      setTenants(prev => prev.filter(tenant => tenant.id !== tenantId));
+      setTenants(prev => prev?.filter(tenant => tenant.id !== tenantId));
       setShowDeleteConfirm(false);
       setTenantToDelete(null);
       setShowDeleteSuccess(true);

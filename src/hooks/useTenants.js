@@ -1,12 +1,62 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tenantService } from '@/api';
-import { toast } from '@/components/ui/use-toast';
+import apiClient from '@/services/apiClient';
+import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
 // Hook for fetching tenants
-export const useTenants = (params = {}) => {
+export const useTenants = (propertyId = null, params = {}) => {
+  const { ownerId } = useAuth();
+  
   return useQuery({
-    queryKey: ['tenants', params],
-    queryFn: () => tenantService.getTenants(params),
+    queryKey: ['tenants', ownerId, propertyId, params],
+    queryFn: async () => {
+      try {
+        const filterData = {
+          name: '',
+          mobile: '',
+          email: '',
+          tenantId: '',
+          ownerId: ownerId || '68a643b5430dd953da794950',
+          propertyId: propertyId || '',
+          state: '',
+          city: '',
+          maritalStatus: '',
+          ...params
+        };
+        
+        const response = await apiClient.post('/api/tenant/list', filterData);
+        
+        let tenants = response?.data?.data?.tenants || response?.data?.tenants || [];
+        
+        if (Array.isArray(tenants)) {
+          // Map API response to the format expected by the UI
+          const mappedTenants = tenants.map(tenant => ({
+            id: tenant._id,
+            _id: tenant._id,
+            firstName: tenant.personalInfo?.firstName || '',
+            lastName: tenant.personalInfo?.lastName || '',
+            name: `${tenant.personalInfo?.firstName || ''} ${tenant.personalInfo?.lastName || ''}`.trim(),
+            email: tenant.contactInfo?.email || 'N/A',
+            phone: tenant.contactInfo?.mobileNumber || 'N/A',
+            propertyId: tenant.propertyId,
+            propertyName: tenant.propertyName || 'No Property Assigned',
+            roomNumber: tenant.roomDetails?.roomNumber || 'N/A',
+            status: tenant.status || 'PENDING',
+            rawData: tenant
+          }));
+          
+          return mappedTenants;
+        }
+        
+        return [];
+      } catch (error) {
+        console.error('Error fetching tenants:', error);
+        return [];
+      }
+    },
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!ownerId, // Only run if ownerId is available
   });
 };
 

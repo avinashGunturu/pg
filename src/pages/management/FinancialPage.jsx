@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DollarSign, Plus, Search, Filter, MoreHorizontal, Edit, Trash2, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
+import { DollarSign, Plus, Search, Filter, MoreHorizontal, Edit, Trash2, ArrowUpRight, ArrowDownRight, FileText, Eye } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,90 +14,100 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import transactionService from '@/services/api/transactionService';
+import { useProperties } from '@/hooks/useProperties';
+import { useTenants } from '@/hooks/useTenants';
+import { useAuth } from '@/context/AuthContext';
 
 const FinancialPage = () => {
+  const { ownerId } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [propertyFilter, setPropertyFilter] = useState('');
+  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [isDeleting, setIsDeleting] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState(null);
+  
+  // Fetch properties and tenants for filtering
+  const { data: properties = [], isError: propertiesError } = useProperties();
+  const { data: tenants = [], isError: tenantsError } = useTenants();
 
-  // Simulate fetching data
-  useEffect(() => {
-    // In a real application, this would be an API call
-    setTimeout(() => {
-      setTransactions([
-        {
-          id: 1,
-          date: '2023-11-01',
-          description: 'Rent Payment - Unit A101',
-          category: 'Income',
-          type: 'Rent',
-          amount: 1500.00,
-          property: 'Sunset Apartments',
-          status: 'Completed',
-          reference: 'TRX-10001',
-        },
-        {
-          id: 2,
-          date: '2023-11-02',
-          description: 'HVAC Repair - Unit B205',
-          category: 'Expense',
-          type: 'Maintenance',
-          amount: 450.00,
-          property: 'Oakwood Residences',
-          status: 'Completed',
-          reference: 'TRX-10002',
-        },
-        {
-          id: 3,
-          date: '2023-11-05',
-          description: 'Security Deposit - Unit C103',
-          category: 'Income',
-          type: 'Deposit',
-          amount: 1000.00,
-          property: 'Riverside Condos',
-          status: 'Completed',
-          reference: 'TRX-10003',
-        },
-        {
-          id: 4,
-          date: '2023-11-10',
-          description: 'Property Insurance Payment',
-          category: 'Expense',
-          type: 'Insurance',
-          amount: 2500.00,
-          property: 'All Properties',
-          status: 'Pending',
-          reference: 'TRX-10004',
-        },
-        {
-          id: 5,
-          date: '2023-11-15',
-          description: 'Landscaping Services',
-          category: 'Expense',
-          type: 'Maintenance',
-          amount: 800.00,
-          property: 'Pine Street Houses',
-          status: 'Completed',
-          reference: 'TRX-10005',
-        },
-      ]);
+  // Fetch transactions
+  const fetchTransactions = async () => {
+    try {
+      setIsLoading(true);
+      
+      const filters = {
+        ownerId: ownerId || '68a643b5430dd953da794950',
+        ...(propertyFilter && propertyFilter !== 'all' && { propertyId: propertyFilter }),
+        ...(statusFilter && statusFilter !== 'all' && { status: statusFilter }),
+        ...(dateRange.startDate && { startDate: dateRange.startDate }),
+        ...(dateRange.endDate && { endDate: dateRange.endDate }),
+      };
+      
+      const response = await transactionService.getTransactions(filters);
+      
+      // Handle different possible response structures
+      let transactionData;
+      if (response.data?.data?.transactions) {
+        transactionData = response.data.data.transactions;
+      } else if (response.data?.transactions) {
+        transactionData = response.data.transactions;
+      } else if (response.transactions) {
+        transactionData = response.transactions;
+      } else if (response.data) {
+        transactionData = response.data;
+      } else {
+        transactionData = response;
+      }
+      
+      // Ensure we always have an array
+      const finalTransactions = Array.isArray(transactionData) ? transactionData : [];
+      
+      setTransactions(finalTransactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      toast.error('Failed to fetch transactions');
+      // Ensure we always have an empty array on error
+      setTransactions([]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
-  }, []);
+    }
+  };
 
-  const filteredTransactions = transactions.filter(transaction => {
-    // Filter by search query
+  // Initial fetch
+  useEffect(() => {
+    fetchTransactions();
+  }, [ownerId, propertyFilter, statusFilter, dateRange]);
+
+  // Filter transactions based on search and tab
+  const filteredTransactions = (Array.isArray(transactions) ? transactions : []).filter(transaction => {
+    // Search filter
     const matchesSearch = 
-      transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.property.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.reference.toLowerCase().includes(searchQuery.toLowerCase());
+      !searchQuery ||
+      transaction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.transactionSubType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.externalPaymentId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.amount?.toString().includes(searchQuery);
     
-    // Filter by tab
+    // Tab filter
     if (activeTab === 'all') return matchesSearch;
-    if (activeTab === 'income') return matchesSearch && transaction.category === 'Income';
-    if (activeTab === 'expense') return matchesSearch && transaction.category === 'Expense';
-    if (activeTab === 'pending') return matchesSearch && transaction.status === 'Pending';
+    if (activeTab === 'income') return matchesSearch && (transaction.transactionType === 'INCOME' || transaction.transactionType === 'RENT');
+    if (activeTab === 'expense') return matchesSearch && transaction.transactionType === 'EXPENSE';
+    if (activeTab === 'pending') return matchesSearch && transaction.status === 'PENDING';
+    if (activeTab === 'due') return matchesSearch && transaction.status === 'DUE';
     
     return matchesSearch;
   });
@@ -106,73 +116,112 @@ const FinancialPage = () => {
     setSearchQuery(e.target.value);
   };
 
-  const handleDelete = (id) => {
-    // In a real application, this would be an API call
-    setTransactions(transactions.filter(transaction => transaction.id !== id));
+  const handleDelete = (transaction) => {
+    setTransactionToDelete(transaction);
+    setShowDeleteModal(true);
+  };
+  
+  const confirmDelete = async () => {
+    if (!transactionToDelete) return;
+    
+    try {
+      setIsDeleting(transactionToDelete._id || transactionToDelete.id);
+      await transactionService.deleteTransaction(transactionToDelete._id || transactionToDelete.id);
+      toast.success('Transaction deleted successfully');
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+      // Refresh transactions
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error('Failed to delete transaction');
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     const options = { year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
+  const formatCurrency = (amount, currency = 'INR') => {
+    const currencySymbols = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€'
+    };
+    return `${currencySymbols[currency] || '₹'}${Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Completed':
-        return <Badge className="bg-green-500">Completed</Badge>;
-      case 'Pending':
-        return <Badge className="bg-amber-500">Pending</Badge>;
-      case 'Failed':
-        return <Badge className="bg-red-500">Failed</Badge>;
-      default:
-        return <Badge>{status}</Badge>;
-    }
+    const statusConfig = {
+      'PAID': { color: 'bg-green-500', text: 'Paid' },
+      'PENDING': { color: 'bg-amber-500', text: 'Pending' },
+      'DUE': { color: 'bg-orange-500', text: 'Due' },
+      'FAILED': { color: 'bg-red-500', text: 'Failed' },
+    };
+    const config = statusConfig[status] || { color: 'bg-gray-500', text: status };
+    return <Badge className={config.color}>{config.text}</Badge>;
   };
 
-  const getCategoryIcon = (category) => {
-    if (category === 'Income') {
+  const getTransactionIcon = (transactionType) => {
+    if (transactionType === 'INCOME' || transactionType === 'RENT') {
       return <ArrowUpRight className="h-4 w-4 text-green-500" />;
     } else {
       return <ArrowDownRight className="h-4 w-4 text-red-500" />;
     }
   };
 
-  const totalIncome = transactions
-    .filter(t => t.category === 'Income')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const getPropertyName = (propertyId) => {
+    const property = properties.find(p => p._id === propertyId || p.id === propertyId);
+    return property?.propertyName || property?.name || property?.title || 'Unknown Property';
+  };
 
-  const totalExpenses = transactions
-    .filter(t => t.category === 'Expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const getTenantName = (tenantId) => {
+    if (!tenantId || tenantId === 'none') return 'N/A';
+    const tenant = tenants.find(t => t._id === tenantId || t.id === tenantId);
+    return tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unknown Tenant';
+  };
 
-  const netIncome = totalIncome - totalExpenses;
+  // Calculate totals
+  const totals = (Array.isArray(filteredTransactions) ? filteredTransactions : []).reduce((acc, transaction) => {
+    const amount = Number(transaction.amount || 0);
+    if (transaction.transactionType === 'INCOME' || transaction.transactionType === 'RENT') {
+      acc.income += amount;
+      acc.incomeCount += 1;
+    } else if (transaction.transactionType === 'EXPENSE') {
+      acc.expenses += amount;
+      acc.expenseCount += 1;
+    }
+    return acc;
+  }, { income: 0, expenses: 0, incomeCount: 0, expenseCount: 0 });
+
+  const netIncome = totals.income - totals.expenses;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Financial Management</h1>
-        <Button as={Link} to="/financial/add-transaction">
-          <Plus className="mr-2 h-4 w-4" />
-          New Transaction
+        <Button asChild>
+          <Link to="/app/financial/transactions/add">
+            <Plus className="mr-2 h-4 w-4" />
+            New Transaction
+          </Link>
         </Button>
       </div>
 
+      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Income</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.income)}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              From {transactions.filter(t => t.category === 'Income').length} transactions
+              From {totals.incomeCount} transactions
             </p>
           </CardContent>
         </Card>
@@ -181,9 +230,9 @@ const FinancialPage = () => {
             <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</div>
+            <div className="text-2xl font-bold text-red-600">{formatCurrency(totals.expenses)}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              From {transactions.filter(t => t.category === 'Expense').length} transactions
+              From {totals.expenseCount} transactions
             </p>
           </CardContent>
         </Card>
@@ -202,6 +251,71 @@ const FinancialPage = () => {
         </Card>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Property</label>
+              <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Properties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Properties</SelectItem>
+                  {propertiesError ? (
+                    <SelectItem value="error" disabled>Error loading properties</SelectItem>
+                  ) : properties.length > 0 ? (
+                    properties.map((property) => (
+                      <SelectItem key={property._id || property.id} value={property._id || property.id}>
+                        {property.propertyName || property.name || property.title}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-data" disabled>No properties available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="PAID">Paid</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="DUE">Due</SelectItem>
+                  <SelectItem value="FAILED">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Start Date</label>
+              <Input
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">End Date</label>
+              <Input
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Transactions Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
@@ -220,7 +334,7 @@ const FinancialPage = () => {
                   onChange={handleSearchChange}
                 />
               </div>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" onClick={fetchTransactions}>
                 <Filter className="h-4 w-4" />
               </Button>
             </div>
@@ -233,6 +347,7 @@ const FinancialPage = () => {
               <TabsTrigger value="income">Income</TabsTrigger>
               <TabsTrigger value="expense">Expenses</TabsTrigger>
               <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="due">Due</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -257,35 +372,48 @@ const FinancialPage = () => {
                 </div>
               ) : (
                 filteredTransactions.map((transaction) => (
-                  <div key={transaction.id} className="grid grid-cols-12 p-4 border-t items-center">
+                  <div key={transaction._id || transaction.id} className="grid grid-cols-12 p-4 border-t items-center">
                     <div className="col-span-1 font-medium">
                       <div className="flex items-center">
-                        {getCategoryIcon(transaction.category)}
-                        <span className="ml-1">{transaction.type}</span>
+                        {getTransactionIcon(transaction.transactionType)}
+                        <span className="ml-1">{transaction.transactionSubType || transaction.transactionType}</span>
                       </div>
                     </div>
                     <div className="col-span-2">
-                      {formatDate(transaction.date)}
+                      <div>{formatDate(transaction.transactionDate)}</div>
+                      {transaction.actualPaymentDate !== transaction.transactionDate && (
+                        <div className="text-xs text-muted-foreground">
+                          Paid: {formatDate(transaction.actualPaymentDate)}
+                        </div>
+                      )}
                     </div>
                     <div className="col-span-3">
-                      <div>{transaction.description}</div>
+                      <div>{transaction.description || 'No description'}</div>
                       <div className="text-xs text-muted-foreground">
-                        Ref: {transaction.reference}
+                        {transaction.externalPaymentId ? `Ref: ${transaction.externalPaymentId}` : 'No reference'}
                       </div>
+                      {transaction.tenantId && transaction.tenantId !== 'none' && (
+                        <div className="text-xs text-blue-600">
+                          Tenant: {getTenantName(transaction.tenantId)}
+                        </div>
+                      )}
                     </div>
                     <div className="col-span-2">
-                      {transaction.property}
+                      {getPropertyName(transaction.propertyId)}
                     </div>
                     <div className="col-span-1">
                       {getStatusBadge(transaction.status)}
                     </div>
-                    <div className={`col-span-2 text-right font-medium ${transaction.category === 'Income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {transaction.category === 'Income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                    <div className={`col-span-2 text-right font-medium ${
+                      transaction.transactionType === 'INCOME' || transaction.transactionType === 'RENT' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {transaction.transactionType === 'INCOME' || transaction.transactionType === 'RENT' ? '+' : '-'}
+                      {formatCurrency(transaction.amount, transaction.currency)}
                     </div>
                     <div className="col-span-1 flex justify-end">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" disabled={isDeleting === (transaction._id || transaction.id)}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -293,29 +421,25 @@ const FinancialPage = () => {
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem asChild>
-                            <Link to={`/financial/transactions/${transaction.id}`} className="cursor-pointer w-full">
+                            <Link to={`/app/financial/transactions/${transaction._id || transaction.id}`} className="cursor-pointer w-full">
+                              <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link to={`/financial/transactions/${transaction.id}/edit`} className="cursor-pointer w-full">
+                            <Link to={`/app/financial/transactions/${transaction._id || transaction.id}/edit`} className="cursor-pointer w-full">
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link to={`/financial/transactions/${transaction.id}/receipt`} className="cursor-pointer w-full">
-                              <FileText className="mr-2 h-4 w-4" />
-                              View Receipt
-                            </Link>
-                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onClick={() => handleDelete(transaction.id)}
+                            onClick={() => handleDelete(transaction)}
                             className="text-red-600 cursor-pointer"
+                            disabled={isDeleting === (transaction._id || transaction.id)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
+                            {isDeleting === (transaction._id || transaction.id) ? 'Deleting...' : 'Delete'}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -328,15 +452,57 @@ const FinancialPage = () => {
         </CardContent>
       </Card>
 
+      {/* Action Buttons */}
       <div className="flex justify-between">
-        <Button variant="outline" as={Link} to="/financial/reports">
-          <FileText className="mr-2 h-4 w-4" />
-          Financial Reports
+        <Button variant="outline" asChild>
+          <Link to="/app/dashboard/reports">
+            <FileText className="mr-2 h-4 w-4" />
+            Financial Reports
+          </Link>
         </Button>
-        <Button variant="outline" as={Link} to="/financial/export">
+        <Button variant="outline" onClick={() => toast.info('Export feature coming soon!')}>
           Export Transactions
         </Button>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Transaction</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to delete this transaction? This action cannot be undone.
+            </p>
+            {transactionToDelete && (
+              <div className="bg-gray-50 p-3 rounded-md mb-4">
+                <p className="text-sm font-medium">{transactionToDelete.description || 'No description'}</p>
+                <p className="text-sm text-gray-600">
+                  {transactionToDelete.transactionType} • {formatCurrency(transactionToDelete.amount, transactionToDelete.currency)}
+                </p>
+              </div>
+            )}
+            <div className="flex space-x-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setTransactionToDelete(null);
+                }}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Transaction'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

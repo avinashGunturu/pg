@@ -1,12 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { propertyService } from '@/api';
-import { toast } from '@/components/ui/use-toast';
+import apiClient from '@/services/apiClient';
+import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
 // Hook for fetching properties
 export const useProperties = (params = {}) => {
+  const { ownerId } = useAuth();
+  
   return useQuery({
-    queryKey: ['properties', params],
-    queryFn: () => propertyService.getProperties(params),
+    queryKey: ['properties', ownerId, params],
+    queryFn: async () => {
+      try {
+        const response = await apiClient.post('/api/property/list', {
+          ownerId: ownerId || '68a643b5430dd953da794950',
+          propertyId: '',
+          location: '',
+          propertyName: '',
+          propertyCategory: '',
+          ...params
+        });
+        
+        const properties = response?.data?.data?.properties || [];
+        return Array.isArray(properties) ? properties : [];
+      } catch (error) {
+        console.error('Error fetching properties:', error);
+        return [];
+      }
+    },
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!ownerId, // Only run if ownerId is available
   });
 };
 

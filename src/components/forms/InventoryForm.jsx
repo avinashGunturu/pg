@@ -225,7 +225,7 @@ const InventoryForm = ({ initialData, onSubmit, isEditing = false, properties = 
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {properties.length > 0 ? (
                       properties.map((property) => (
                         <SelectItem key={property.id} value={property.id}>
