@@ -2,51 +2,83 @@ import apiClient from './apiClient';
 
 const inventoryService = {
   // Get all inventory items with optional filtering
-  getInventoryItems: async (params) => {
-    const response = await apiClient.get('/inventory', { params });
+  getInventoryItems: async (filterData = {}) => {
+    const response = await apiClient.post('/inventory/list', filterData);
     return response.data;
   },
 
   // Get a single inventory item by ID
-  getInventoryItemById: async (id) => {
-    const response = await apiClient.get(`/inventory/${id}`);
+  getInventoryItemById: async (inventoryId, ownerId) => {
+    const response = await apiClient.post('/inventory/list', {
+      inventoryId,
+      ownerId,
+      propertyId: '',
+      itemName: '',
+      category: '',
+      status: ''
+    });
     return response.data;
   },
 
   // Create a new inventory item
   createInventoryItem: async (itemData) => {
-    const response = await apiClient.post('/inventory', itemData);
+    const response = await apiClient.post('/inventory/create', itemData);
     return response.data;
   },
 
   // Update an existing inventory item
-  updateInventoryItem: async (id, itemData) => {
-    const response = await apiClient.put(`/inventory/${id}`, itemData);
+  updateInventoryItem: async (inventoryId, updateData) => {
+    const response = await apiClient.put('/inventory/update', {
+      inventoryId,
+      updateData
+    });
     return response.data;
   },
 
   // Delete an inventory item
-  deleteInventoryItem: async (id) => {
-    const response = await apiClient.delete(`/inventory/${id}`);
-    return response.data;
-  },
-
-  // Get inventory item history
-  getInventoryItemHistory: async (itemId, params) => {
-    const response = await apiClient.get(`/inventory/${itemId}/history`, { params });
-    return response.data;
-  },
-
-  // Update inventory item stock
-  updateInventoryStock: async (itemId, stockData) => {
-    const response = await apiClient.patch(`/inventory/${itemId}/stock`, stockData);
+  deleteInventoryItem: async (inventoryId) => {
+    const response = await apiClient.post('/inventory/delete', {
+      inventoryId
+    });
     return response.data;
   },
 
   // Get inventory statistics
-  getInventoryStats: async () => {
-    const response = await apiClient.get('/inventory/stats');
-    return response.data;
+  getInventoryStats: async (ownerId) => {
+    try {
+      const response = await apiClient.post('/inventory/list', {
+        ownerId,
+        propertyId: '',
+        itemName: '',
+        category: '',
+        status: ''
+      });
+      
+      const items = response?.data?.data?.inventories || [];
+      
+      const stats = {
+        totalItems: items.length,
+        activeItems: items.filter(item => item.status === 'Active').length,
+        inactiveItems: items.filter(item => item.status === 'Inactive').length,
+        disposedItems: items.filter(item => item.status === 'Disposed').length,
+        lowStockItems: items.filter(item => item.quantity <= 5).length,
+        totalValue: items.reduce((sum, item) => sum + (item.totalValue || 0), 0)
+      };
+      
+      return { data: stats };
+    } catch (error) {
+      console.error('Error fetching inventory stats:', error);
+      return {
+        data: {
+          totalItems: 0,
+          activeItems: 0,
+          inactiveItems: 0,
+          disposedItems: 0,
+          lowStockItems: 0,
+          totalValue: 0
+        }
+      };
+    }
   },
 };
 

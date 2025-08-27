@@ -1,21 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { inventoryService } from '@/api';
-import { toast } from '@/components/ui/use-toast';
+import inventoryService from '@/api/inventoryService';
+import { toast } from 'sonner';
 
 // Hook for fetching inventory items
-export const useInventoryItems = (params = {}) => {
+export const useInventoryItems = (filterData = {}) => {
   return useQuery({
-    queryKey: ['inventory', params],
-    queryFn: () => inventoryService.getInventoryItems(params),
+    queryKey: ['inventory', filterData],
+    queryFn: () => inventoryService.getInventoryItems(filterData),
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 };
 
 // Hook for fetching a single inventory item
-export const useInventoryItem = (id) => {
+export const useInventoryItem = (inventoryId, ownerId) => {
   return useQuery({
-    queryKey: ['inventoryItem', id],
-    queryFn: () => inventoryService.getInventoryItemById(id),
-    enabled: !!id, // Only run if id is provided
+    queryKey: ['inventoryItem', inventoryId, ownerId],
+    queryFn: () => inventoryService.getInventoryItemById(inventoryId, ownerId),
+    enabled: !!(inventoryId && ownerId), // Only run if both IDs are provided
   });
 };
 
@@ -25,20 +26,14 @@ export const useCreateInventoryItem = () => {
 
   return useMutation({
     mutationFn: (itemData) => inventoryService.createInventoryItem(itemData),
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate inventory query to refetch the list
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      toast({
-        title: 'Success',
-        description: 'Inventory item created successfully',
-      });
+      return data;
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to create inventory item',
-        variant: 'destructive',
-      });
+      console.error('Create inventory error:', error);
+      throw error;
     },
   });
 };
@@ -48,22 +43,16 @@ export const useUpdateInventoryItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }) => inventoryService.updateInventoryItem(id, data),
-    onSuccess: (_, variables) => {
+    mutationFn: ({ inventoryId, updateData }) => inventoryService.updateInventoryItem(inventoryId, updateData),
+    onSuccess: (data, variables) => {
       // Invalidate specific inventory item query and inventory list
-      queryClient.invalidateQueries({ queryKey: ['inventoryItem', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryItem', variables.inventoryId] });
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      toast({
-        title: 'Success',
-        description: 'Inventory item updated successfully',
-      });
+      return data;
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to update inventory item',
-        variant: 'destructive',
-      });
+      console.error('Update inventory error:', error);
+      throw error;
     },
   });
 };
@@ -73,63 +62,27 @@ export const useDeleteInventoryItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id) => inventoryService.deleteInventoryItem(id),
+    mutationFn: (inventoryId) => inventoryService.deleteInventoryItem(inventoryId),
     onSuccess: () => {
       // Invalidate inventory query to refetch the list
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      toast({
-        title: 'Success',
-        description: 'Inventory item deleted successfully',
-      });
+      toast.success('Inventory item deleted successfully!');
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to delete inventory item',
-        variant: 'destructive',
-      });
+      console.error('Delete inventory error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete inventory item';
+      toast.error(errorMessage);
+      throw error;
     },
-  });
-};
-
-// Hook for updating inventory stock
-export const useUpdateInventoryStock = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, stockData }) => inventoryService.updateInventoryStock(id, stockData),
-    onSuccess: (_, variables) => {
-      // Invalidate specific inventory item query and inventory list
-      queryClient.invalidateQueries({ queryKey: ['inventoryItem', variables.id] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      toast({
-        title: 'Success',
-        description: 'Inventory stock updated successfully',
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to update inventory stock',
-        variant: 'destructive',
-      });
-    },
-  });
-};
-
-// Hook for fetching inventory item history
-export const useInventoryItemHistory = (itemId, params = {}) => {
-  return useQuery({
-    queryKey: ['inventoryItemHistory', itemId, params],
-    queryFn: () => inventoryService.getInventoryItemHistory(itemId, params),
-    enabled: !!itemId, // Only run if itemId is provided
   });
 };
 
 // Hook for fetching inventory statistics
-export const useInventoryStats = () => {
+export const useInventoryStats = (ownerId) => {
   return useQuery({
-    queryKey: ['inventoryStats'],
-    queryFn: () => inventoryService.getInventoryStats(),
+    queryKey: ['inventoryStats', ownerId],
+    queryFn: () => inventoryService.getInventoryStats(ownerId),
+    enabled: !!ownerId,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 };

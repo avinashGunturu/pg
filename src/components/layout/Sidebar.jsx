@@ -67,7 +67,7 @@ const Sidebar = ({ closeSidebar, onCollapsedChange }) => {
       submenu: [
         { title: 'All Items', href: '/app/inventory' },
         { title: 'Add Item', href: '/app/inventory/add' },
-        { title: 'Categories', href: '/app/inventory/categories' },
+        // { title: 'Categories', href: '/app/inventory/categories' },
       ],
     },
     {
