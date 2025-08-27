@@ -46,19 +46,19 @@ const InventoryPage = () => {
   const [properties, setProperties] = useState([]);
   
   const [filters, setFilters] = useState({
-    propertyId: '',
+    propertyId: 'all',
     itemName: '',
-    category: '',
-    status: '',
+    category: 'all',
+    status: 'all',
   });
 
   // Construct filter data for API call
   const filterData = {
     ownerId: ownerId || '',
-    propertyId: filters.propertyId || '',
+    propertyId: filters.propertyId === 'all' ? '' : filters.propertyId || '',
     itemName: searchQuery || filters.itemName || '',
-    category: filters.category || '',
-    status: filters.status || '',
+    category: filters.category === 'all' ? '' : filters.category || '',
+    status: filters.status === 'all' ? '' : filters.status || '',
   };
 
   // Fetch inventory data
@@ -114,10 +114,10 @@ const InventoryPage = () => {
 
   const clearFilters = () => {
     setFilters({
-      propertyId: '',
+      propertyId: 'all',
       itemName: '',
-      category: '',
-      status: '',
+      category: 'all',
+      status: 'all',
     });
     setSearchQuery('');
   };
@@ -299,7 +299,7 @@ const InventoryPage = () => {
                       <SelectValue placeholder="All properties" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Properties</SelectItem>
+                      <SelectItem value="all">All Properties</SelectItem>
                       {properties.map((property) => (
                         <SelectItem key={property._id} value={property._id}>
                           {property.propertyName}
@@ -316,7 +316,7 @@ const InventoryPage = () => {
                       <SelectValue placeholder="All categories" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Categories</SelectItem>
+                      <SelectItem value="all">All Categories</SelectItem>
                       <SelectItem value="Furniture">Furniture</SelectItem>
                       <SelectItem value="Appliances">Appliances</SelectItem>
                       <SelectItem value="Electronics">Electronics</SelectItem>
@@ -336,7 +336,7 @@ const InventoryPage = () => {
                       <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Statuses</SelectItem>
+                      <SelectItem value="all">All Statuses</SelectItem>
                       <SelectItem value="Active">Active</SelectItem>
                       <SelectItem value="Inactive">Inactive</SelectItem>
                       <SelectItem value="Disposed">Disposed</SelectItem>
@@ -375,7 +375,7 @@ const InventoryPage = () => {
                   <Package className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                   <h3 className="text-lg font-semibold mb-2">No inventory items found</h3>
                   <p className="mb-4">
-                    {searchQuery || Object.values(filters).some(f => f) 
+                    {searchQuery || Object.values(filters).some(f => f && f !== 'all') 
                       ? 'Try adjusting your search or filters.' 
                       : 'Get started by adding your first inventory item.'}
                   </p>

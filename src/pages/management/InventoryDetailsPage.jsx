@@ -51,7 +51,7 @@ const InventoryDetailsPage = () => {
           propertyCategory: ''
         });
         
-        const propertiesList = response?.data?.data?.properties || response?.data?.properties || [];
+        const propertiesList = response?.data?.properties || response?.data?.properties || [];
         setProperties(propertiesList);
       } catch (error) {
         console.error('Error fetching properties:', error);
@@ -78,7 +78,7 @@ const InventoryDetailsPage = () => {
     }
 
     if (inventoryResponse?.data) {
-      const items = inventoryResponse.data.data?.inventories || [];
+      const items = inventoryResponse?.data?.inventories || [];
       
       if (items.length > 0) {
         setInventoryData(items[0]); // Get the first (and should be only) item
