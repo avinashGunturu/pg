@@ -1,7 +1,7 @@
 // API Configuration - Centralized for easy environment switching
 export const API_CONFIG = {
   // Base URL - can be changed via environment variable
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://pgm-8a8h.onrender.com',
   
   // API Endpoints
   ENDPOINTS: {

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create a base API client with axios
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://pgm-8a8h.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
   },

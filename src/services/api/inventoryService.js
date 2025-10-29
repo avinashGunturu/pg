@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api/inventory';
+const API_URL = 'https://pgm-8a8h.onrender.com/api/inventory';
 
 // Configure axios instance
 const inventoryAPI = axios.create({

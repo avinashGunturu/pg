@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api/auth';
+const API_URL = 'https://pgm-8a8h.onrender.com/api/auth';
 
 // Configure axios instance
 const authAPI = axios.create({

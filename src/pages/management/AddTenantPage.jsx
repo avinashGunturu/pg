@@ -34,6 +34,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/services/apiClient';
 import transactionService from '@/services/api/transactionService';
+import propertyService from '@/services/api/propertyService';
 import { Badge } from '@/components/ui/badge';
 
 // Enhanced Zod Schema for Tenant - Dynamic based on edit mode
@@ -164,6 +165,7 @@ const AddTenantPage = () => {
   const [createdTransactionId, setCreatedTransactionId] = useState(null);
   const [createdDepositTransactionId, setCreatedDepositTransactionId] = useState(null);
   const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
+  const [originalTenantData, setOriginalTenantData] = useState(null); // Add this state to track original tenant data
 
   const totalSteps = 7;
   
@@ -436,6 +438,9 @@ useEffect(() => {
   // Enhanced prefill form with comprehensive validation
   const prefillFormData = async (tenantData,properties) => {
     console.log('Starting comprehensive form prefilling for edit mode');
+    
+    // Store original tenant data for edit mode
+    setOriginalTenantData(tenantData);
     
     // Validate tenant data exists
     if (!tenantData) {
@@ -912,8 +917,30 @@ useEffect(() => {
               String(room.roomName) === String(selectedRoomNumber)
             );
             
-            if (selectedRoom && selectedRoom.occupied && !isEditMode) {
+            // Check if we're editing and the room is the same as the original
+            const isSameRoomAsOriginal = isEditMode && originalTenantData && 
+              originalTenantData.roomDetails &&
+              originalTenantData.roomDetails.floor === selectedFloor &&
+              String(originalTenantData.roomDetails.roomNumber) === String(selectedRoomNumber);
+            
+            // For new tenants or when changing rooms in edit mode, check if room is occupied
+            if (selectedRoom && selectedRoom.occupied && !isSameRoomAsOriginal) {
               errors.push('Selected room is already occupied. Please choose another room.');
+            }
+            
+            // Check bed capacity for PG properties using the correct field name
+            if (selectedRoom && selectedProperty) {
+              const property = properties.find(p => p._id === selectedPropertyId);
+              if (property && property.propertyType === 'PG') {
+                // Check if room has available beds using the correct field name
+                const noOfBeds = selectedRoom.noOfBeds || 1;
+                const noOfBedsOccupied = selectedRoom.noOfBedsOccupied || selectedRoom.noOfBedsOccupiedu || 0;
+                
+                // If this is a new tenant assignment, check if there's space
+                if (!isSameRoomAsOriginal && noOfBedsOccupied >= noOfBeds) {
+                  errors.push(`Room is full. All ${noOfBeds} beds are occupied.`);
+                }
+              }
             }
           }
         }
@@ -1102,6 +1129,16 @@ useEffect(() => {
         
         if (response?.data && (response.data.code === 0 || response.data.success || response.status === 200)) {
           console.log('Tenant updated successfully');
+          
+          // Update property floor details if room changed
+          try {
+            await updatePropertyFloorDetails(data.propertyId, data.roomDetails, id, data.personalInfo);
+          } catch (propertyUpdateError) {
+            console.error('Error updating property floor details:', propertyUpdateError);
+            // Don't fail the entire process if property update fails
+            console.warn('Tenant updated successfully, but property floor update failed');
+          }
+          
           setShowSuccessModal(true);
         } else {
           const errorMsg = response?.data?.message || response?.data?.error || 'Failed to update tenant';
@@ -1213,6 +1250,15 @@ useEffect(() => {
             setIsCreatingTransaction(false);
           }
           
+          // Update property floor details to mark room as occupied AFTER tenant is created
+          try {
+            await updatePropertyFloorDetails(data.propertyId, data.roomDetails, tenantId, data.personalInfo);
+          } catch (propertyUpdateError) {
+            console.error('Error updating property floor details:', propertyUpdateError);
+            // Don't fail the entire process if property update fails
+            console.warn('Tenant created successfully, but property floor update failed');
+          }
+          
           setShowSuccessModal(true);
           reset();
           setUploadedDocuments([]);
@@ -1229,6 +1275,122 @@ useEffect(() => {
       setShowErrorModal(true);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Function to update property floor details when tenant is created/updated
+  const updatePropertyFloorDetails = async (propertyId, roomDetails, tenantId, personalInfo) => {
+    console.log('Updating property floor details for property:', propertyId, 'room:', roomDetails);
+    
+    try {
+      // First, get the current property data using the same approach as in the component
+      const propertyResponse = await apiClient.post('/api/property/list', {
+        ownerId: ownerId || '68a643b5430dd953da794950',
+        id: propertyId
+      });
+      
+      console.log('Current property data:', propertyResponse);
+      
+      if (propertyResponse?.data?.data?.properties && propertyResponse.data.data.properties.length > 0) {
+        const propertyData = propertyResponse.data.data.properties[0];
+        
+        // Track if we're changing rooms (for edit mode)
+        let isChangingRooms = false;
+        let oldRoomDetails = null;
+        
+        if (isEditMode && originalTenantData) {
+          // Check if the tenant is changing rooms
+          isChangingRooms = !(originalTenantData.roomDetails.floor === roomDetails.floor && 
+                             String(originalTenantData.roomDetails.roomNumber) === String(roomDetails.roomNumber));
+          if (isChangingRooms) {
+            oldRoomDetails = originalTenantData.roomDetails;
+          }
+        }
+        
+        // Find the floor and room to update
+        const updatedFloors = propertyData.floors.map(floor => {
+          // Handle old room (decrement bed count if changing rooms)
+          if (isChangingRooms && oldRoomDetails && floor.floorNumber === oldRoomDetails.floor) {
+            const updatedRooms = floor.rooms.map(room => {
+              if (room.roomNo === oldRoomDetails.roomNumber) {
+                // Decrement the bed count for the old room
+                const currentNoOfBedsOccupied = room.noOfBedsOccupied || room.noOfBedsOccupiedu || 0;
+                const newNoOfBedsOccupied = Math.max(0, currentNoOfBedsOccupied - 1);
+                const isStillOccupied = newNoOfBedsOccupied > 0;
+                
+                return {
+                  ...room,
+                  noOfBedsOccupied: newNoOfBedsOccupied,
+                  noOfBedsOccupiedu: newNoOfBedsOccupied, // Update both fields for compatibility
+                  isOccupied: isStillOccupied,
+                  // Remove tenant reference if room is now empty
+                  ...(isStillOccupied ? {} : { occupiedBy: undefined })
+                };
+              }
+              return room;
+            });
+            
+            return {
+              ...floor,
+              rooms: updatedRooms
+            };
+          }
+          
+          // Handle new room
+          if (floor.floorNumber === roomDetails.floor) {
+            // Update the specific room
+            const updatedRooms = floor.rooms.map(room => {
+              if (room.roomNo === roomDetails.roomNumber) {
+                // Increment the bed count for the new room
+                const currentNoOfBedsOccupied = room.noOfBedsOccupied || room.noOfBedsOccupiedu || 0;
+                const newNoOfBedsOccupied = currentNoOfBedsOccupied + 1;
+                
+                return {
+                  ...room,
+                  noOfBedsOccupied: newNoOfBedsOccupied,
+                  noOfBedsOccupiedu: newNoOfBedsOccupied, // Update both fields for compatibility
+                  isOccupied: newNoOfBedsOccupied > 0,
+                  occupiedBy: {  // Add tenant reference
+                    tenantId: tenantId,
+                    tenantName: `${personalInfo.firstName} ${personalInfo.lastName}`
+                  }
+                };
+              }
+              return room;
+            });
+            
+            return {
+              ...floor,
+              rooms: updatedRooms
+            };
+          }
+          return floor;
+        });
+        
+        // Update the property with the modified floors
+        const updateData = {
+          ...propertyData,
+          floors: updatedFloors
+        };
+        
+        console.log('Updating property with data:', updateData);
+        const updateResponse = await apiClient.put('/api/property/update', {
+          propertyId: propertyId,
+          updateData: updateData
+        });
+        console.log('Property update response:', updateResponse);
+        
+        if (updateResponse && (updateResponse.data.code === 0 || updateResponse.data.success)) {
+          console.log('Property floor details updated successfully');
+        } else {
+          throw new Error('Failed to update property floor details');
+        }
+      } else {
+        throw new Error('Failed to fetch property data');
+      }
+    } catch (error) {
+      console.error('Error updating property floor details:', error);
+      throw error;
     }
   };
 
@@ -1325,7 +1487,20 @@ useEffect(() => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {availableFloors.map((floor) => {
               const floorRooms = rooms[floor] || [];
-              const availableRooms = floorRooms.filter(room => !room.occupied).length;
+              const availableRooms = floorRooms.filter(room => {
+                // Check if room is available (not fully occupied)
+                const noOfBeds = room.noOfBeds || 1;
+                const noOfBedsOccupied = room.noOfBedsOccupied || room.noOfBedsOccupiedu || 0;
+                const isFullyOccupied = noOfBedsOccupied >= noOfBeds;
+                
+                // If in edit mode and this is the original room, it should be considered available
+                const isSameRoomAsOriginal = isEditMode && originalTenantData && 
+                  originalTenantData.roomDetails &&
+                  originalTenantData.roomDetails.floor === parseInt(floor) &&
+                  String(originalTenantData.roomDetails.roomNumber) === String(room.roomNo);
+                
+                return !isFullyOccupied || isSameRoomAsOriginal;
+              }).length;
               const totalRooms = floorRooms.length;
               const floorNumber = parseInt(floor);
               
@@ -1340,7 +1515,7 @@ useEffect(() => {
                     setValue('roomDetails.roomType', ''); // Reset room type
                   }}
                   className="h-16 flex-col"
-                  disabled={totalRooms === 0}
+                  disabled={availableRooms === 0}
                 >
                   <div className="flex items-center gap-1 mb-1">
                     <Building2 className="h-4 w-4" />
@@ -1373,7 +1548,21 @@ useEffect(() => {
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-100">
                 {rooms[selectedFloor.toString()].map((room, roomIndex) => {
                   const isSelected = selectedRoomNumber === room.roomNo;
-                  const isOccupied = room.occupied;
+                  
+                  // Check if room is fully occupied using the correct field name
+                  const noOfBeds = room.noOfBeds || 1;
+                  const noOfBedsOccupied = room.noOfBedsOccupied || room.noOfBedsOccupiedu || 0;
+                  const isFullyOccupied = noOfBedsOccupied >= noOfBeds;
+                  
+                  // If in edit mode and this is the original room, it should be selectable
+                  const isSameRoomAsOriginal = isEditMode && originalTenantData && 
+                    originalTenantData.roomDetails &&
+                    originalTenantData.roomDetails.floor === selectedFloor &&
+                    String(originalTenantData.roomDetails.roomNumber) === String(room.roomNo);
+                  
+                  const isSelectable = !isFullyOccupied || isSameRoomAsOriginal;
+                  const isOccupied = room.occupied && !isSameRoomAsOriginal;
+                  
                   const uniqueKey = room.roomId || `${selectedFloor}_${room.roomNo}_${roomIndex}`;
                   
                   return (
@@ -1384,13 +1573,15 @@ useEffect(() => {
                         ${
                           isSelected
                             ? 'border-blue-600 bg-blue-50 shadow-md ring-2 ring-blue-200 transform scale-105' 
-                            : isOccupied 
-                              ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60'
-                              : 'border-gray-200 hover:border-blue-300 bg-white hover:shadow-sm'
+                            : isFullyOccupied && !isSameRoomAsOriginal
+                              ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'
+                              : isOccupied 
+                                ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60'
+                                : 'border-gray-200 hover:border-blue-300 bg-white hover:shadow-sm'
                         }
                       `}
                       onClick={() => {
-                        if (!isOccupied) {
+                        if (isSelectable) {
                           setValue('roomDetails.roomNumber', room.roomNo);
                           setValue('roomDetails.roomType', room.sharingOption);
                         }
@@ -1409,7 +1600,9 @@ useEffect(() => {
                           <div className="text-xs text-green-600 mb-1">₹{room.rent}/month</div>
                         )}
                         <div className="text-xs">
-                          {isOccupied ? (
+                          {isFullyOccupied && !isSameRoomAsOriginal ? (
+                            <Badge variant="destructive" className="text-xs bg-red-500">Fully Occupied</Badge>
+                          ) : isOccupied ? (
                             <Badge variant="destructive" className="text-xs">Occupied</Badge>
                           ) : (
                             <Badge variant={isSelected ? "default" : "outline"} className="text-xs">
@@ -1425,7 +1618,7 @@ useEffect(() => {
                         </>
                       )}
                       <div className="absolute top-1 left-1 text-xs text-gray-500">
-                        {room.noOfBeds}🛏️
+                        {noOfBedsOccupied}/{room.noOfBeds}🛏️
                       </div>
                     </div>
                   );
@@ -1461,6 +1654,11 @@ useEffect(() => {
                         <span className="text-blue-700 font-medium">Number of Beds:</span> {currentRoom.noOfBeds}
                       </div>
                     )}
+                    {(currentRoom.noOfBedsOccupied !== undefined || currentRoom.noOfBedsOccupiedu !== undefined) ? (
+                      <div>
+                        <span className="text-blue-700 font-medium">Occupied Beds:</span> {currentRoom.noOfBedsOccupied || currentRoom.noOfBedsOccupiedu || 0}
+                      </div>
+                    ) : null}
                     {currentRoom.sharingOption && (
                       <div>
                         <span className="text-blue-700 font-medium">Sharing Type:</span> {currentRoom.sharingOption}

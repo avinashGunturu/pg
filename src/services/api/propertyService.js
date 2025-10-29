@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api/property';
+const API_URL = 'https://pgm-8a8h.onrender.com/api/property';
 
 // Configure axios instance
 const propertyAPI = axios.create({
