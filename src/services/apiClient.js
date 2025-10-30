@@ -5,7 +5,7 @@ import { getAuthCookies, clearAuthCookies } from '../utils/cookies';
 // Create axios instance with default configuration
 const apiClient = axios.create({
   baseURL: API_CONFIG.BASE_URL,
-  timeout: 70000, // 10 seconds
+  timeout: 100000, // 10 seconds
   withCredentials: true, // Important for CORS with cookies
   headers: {
     'Content-Type': 'application/json',
